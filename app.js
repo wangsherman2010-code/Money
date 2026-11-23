@@ -17,6 +17,7 @@ let settings = {
   parser: 'local', apiKey: '', model: 'claude-opus-5-5', confirm: true,
   mainCurrency: 'CNY', defaultCurrency: 'NZD', currencies: ['NZD', 'CNY'],
   accounts: ['卡', '现金', '微信', '支付宝'], defaultAccount: '卡', theme: 'auto',
+  fontSize: 1, fontWeight: 'medium', font: 'system',
   ...store.get(SKEY, {}),
 };
 // 汇率：rates[X] = 1 纽币能换多少 X。旧版只有 settings.rate（1 NZD = ? CNY）
@@ -291,10 +292,45 @@ function renderSettings() {
   $('#setDefaultAcc').innerHTML = settings.accounts.map(a => `<option>${esc(a)}</option>`).join('');
   $('#setDefaultAcc').value = settings.defaultAccount;
   $('#setTheme').value = settings.theme;
+  $('#fsChips').innerHTML = FONT_SIZES.map(([v, n]) => `<label class="chip"><input type="radio" name="fs" value="${v}" ${+settings.fontSize === v ? 'checked' : ''}>${n}</label>`).join('');
+  $('#fwChips').innerHTML = Object.entries(FONT_WEIGHTS).map(([k, [n, w]]) => `<label class="chip" style="font-weight:${w}"><input type="radio" name="fw" value="${k}" ${settings.fontWeight === k ? 'checked' : ''}>${n}</label>`).join('');
+  $('#setFont').innerHTML = Object.entries(FONTS).map(([k, f]) => `<option value="${k}" style="font-family:${f.family.replace(/"/g, "'")}">${f.name}</option>`).join('');
+  $('#setFont').value = settings.font;
   $('#dataInfo').textContent = `共 ${records.length} 条记录，已学会 ${Object.keys(memory).length} 个商家。数据只存在这台设备的浏览器里，请定期“备份 JSON”。`;
 }
 
+const FONT_SIZES = [[0.9, '小'], [1, '标准'], [1.12, '大'], [1.25, '特大'], [1.4, '超大']];
+const FONT_WEIGHTS = { normal: ['常规', 400, 600], medium: ['中等', 500, 700], bold: ['加粗', 600, 800] };
+const SYS = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
+const FONTS = {
+  system:  { name: '系统默认', family: SYS },
+  sans:    { name: '思源黑体（清晰）', family: `"Noto Sans SC", ${SYS}`, google: 'Noto+Sans+SC:wght@400;500;600;700;800' },
+  serif:   { name: '思源宋体（书卷）', family: `"Noto Serif SC", "Songti SC", serif`, google: 'Noto+Serif+SC:wght@400;500;600;700;800' },
+  xiaowei: { name: '站酷小薇（文艺）', family: `"ZCOOL XiaoWei", "Noto Serif SC", serif`, google: 'ZCOOL+XiaoWei' },
+  kuaile:  { name: '站酷快乐体（活泼）', family: `"ZCOOL KuaiLe", ${SYS}`, google: 'ZCOOL+KuaiLe' },
+  kai:     { name: '楷体（手机自带时）', family: `"Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", serif` },
+};
+function loadGoogleFont(spec) {
+  const id = 'gf-' + spec.split(':')[0];
+  if (document.getElementById(id)) return;
+  const l = document.createElement('link');
+  l.id = id; l.rel = 'stylesheet';
+  l.href = `https://fonts.googleapis.com/css2?family=${spec}&display=swap`;
+  document.head.appendChild(l);
+}
+function applyAppearance() {
+  const st = document.documentElement.style;
+  const [, fw, fwb] = FONT_WEIGHTS[settings.fontWeight] || FONT_WEIGHTS.medium;
+  const f = FONTS[settings.font] || FONTS.system;
+  st.setProperty('--fs', settings.fontSize);
+  document.documentElement.toggleAttribute('data-big', settings.fontSize >= 1.25); // 特大以上：列表只显示分类图标，给名字留空间
+  st.setProperty('--fw', fw);
+  st.setProperty('--fwb', fwb);
+  st.setProperty('--font-family', f.family);
+  if (f.google) loadGoogleFont(f.google);
+}
 function applyTheme() {
+  applyAppearance();
   if (settings.theme === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
 }
@@ -569,6 +605,9 @@ bindSetting('#setAccounts', 'accounts', v => [...new Set(v.split(/[,，、]/).ma
 });
 bindSetting('#setDefaultAcc', 'defaultAccount');
 bindSetting('#setTheme', 'theme', v => v, applyTheme);
+bindSetting('#setFont', 'font', v => v, applyAppearance);
+$('#fsChips').addEventListener('change', e => { settings.fontSize = +e.target.value; saveSettings(); applyAppearance(); render(); });
+$('#fwChips').addEventListener('change', e => { settings.fontWeight = e.target.value; saveSettings(); applyAppearance(); render(); });
 
 $('#btnRate').onclick = async () => {
   try {
