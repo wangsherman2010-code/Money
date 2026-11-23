@@ -38,35 +38,43 @@ const SMALL = '(?:([零一二两三四五六七八九\\d])(?:毛|角)?)?(?:([一
 const SPEND_BEFORE = /(花了?|用了?|一共|总共|共计|共|付了?|刷了?|消费了?|是|要|价格|总价|合计|价值)\s*$/;
 
 export const EXPENSE_CATS = [
-  { name: '买菜', emoji: '🛒', re: /超市|买菜|蔬菜|水果|肉|鸡蛋|牛奶|面包|大米|食材|菜市场|海鲜|grocer|groceries|supermarket|countdown|woolworth|new ?world|pak ?n ?save|fresh ?choice|four ?square|farmers? market|veg|fruit|milk|bread/i },
-  { name: '餐饮', emoji: '🍜', re: /饭|餐|三明治|炸鸡|便利店|小吃|夜市|sandwich|吃|喝|咖啡|奶茶|外卖|早餐|午餐|晚餐|夜宵|火锅|烧烤|面馆|餐厅|麦当劳|肯德基|汉堡|披萨|寿司|茶|酒吧|啤酒|food|lunch|dinner|breakfast|brunch|coffee|cafe|restaurant|takeaway|kfc|mcdonald|subway|burger|pizza|sushi|bubble tea|drink|beer|bar\b|food ?court|uber ?eats|doordash/i },
-  { name: '交通', emoji: '🚗', re: /打车|出租|滴滴|地铁|公交|巴士|火车|机票|航班|加油|汽油|油费|停车|过路费|车票|修车|保养|uber(?! ?eats)|taxi|bus\b|train|ferry|flight|petrol|gas|fuel|parking|z ?energy|\bbp\b|mobil|gull|caltex|wof|rego|at ?hop|toll/i },
-  { name: '住房', emoji: '🏠', re: /房租|租金|水费|电费|燃气|网费|宽带|物业|贷款|房贷|rent|mortgage|power|electricity|water rates|internet|broadband|mercury|genesis|contact energy|rates/i },
-  { name: '通讯', emoji: '📱', re: /话费|手机费|流量|充值|spark|one ?nz|2degrees|skinny|phone bill|mobile plan/i },
-  { name: '医疗', emoji: '💊', re: /医院|看病|药|诊所|牙医|体检|医生|chemist|pharmacy|\bgp\b|doctor|dentist|hospital|medicine|physio/i },
-  { name: '娱乐', emoji: '🎬', re: /电影|游戏|ktv|门票|演唱会|景点|会员|音乐|movie|cinema|film|game|concert|ticket|netflix|spotify|disney|youtube premium|event cinemas|hoyts/i },
-  { name: '旅行', emoji: '✈️', re: /旅游|旅行|酒店|民宿|住宿|hotel|motel|airbnb|booking\.com|travel|holiday/i },
-  { name: '学习', emoji: '📚', re: /书|课程|培训|学费|教材|文具|toastmasters|book|course|tuition|udemy|kindle|whitcoulls|paper ?plus|stationery/i },
-  { name: '爱好', emoji: '🎸', re: /吉他|琴弦|乐器|摄影|镜头|相机|davinci|达芬奇|guitar|strings|camera|lens|tripod|gym|健身|运动|sport|fitness/i },
-  { name: '日用', emoji: '🧴', re: /日用|纸巾|洗发|牙膏|洗衣|清洁|家居|宜家|household|warehouse|kmart|mitre ?10|bunnings|briscoes|ikea|farmers|cleaning|tissue|shampoo/i },
-  { name: '服饰', emoji: '👔', re: /衣服|裤子|鞋|帽子|外套|裙|袜|包包|服装|t恤|衬衫|内衣|apparel|cloth|shirt|jacket|coat|shoe|sneaker|jeans|pants|dress|socks|uniqlo|zara|h&m|tommy|hilfiger|skechers|nike|adidas|under ?armou?r|cotton on|glassons|kathmandu/i },
-  { name: '数码', emoji: '💻', re: /手机|电脑|耳机|充电|数据线|硬盘|内存卡|sd卡|苹果|三星|大疆|laptop|computer|iphone|ipad|headphone|charger|cable|ssd|hard drive|sd card|noel ?leeming|jb ?hi-?fi|pb ?tech|apple|samsung|dji/i },
-  { name: '美容', emoji: '💇', re: /按摩|spa|massage|理发|剪头|美容|美甲|化妆|护肤|haircut|barber|salon|beauty|cosmetic|skincare|mecca|sephora/i },
-  { name: '人情', emoji: '🎁', re: /红包|礼物|礼金|请客|送礼|份子|捐|gift|present|donation|treat/i },
-  { name: '其他', emoji: '🏷️', re: /$^/ },
+  { name: '买菜', en: 'Groceries', emoji: '🛒', re: /超市|买菜|蔬菜|水果|肉|鸡蛋|牛奶|面包|大米|食材|菜市场|海鲜|grocer|groceries|supermarket|countdown|woolworth|new ?world|pak ?n ?save|fresh ?choice|four ?square|farmers? market|veg|fruit|milk|bread/i },
+  { name: '餐饮', en: 'Food', emoji: '🍜', re: /饭|餐|三明治|炸鸡|便利店|小吃|夜市|sandwich|吃|喝|咖啡|奶茶|外卖|早餐|午餐|晚餐|夜宵|火锅|烧烤|面馆|餐厅|麦当劳|肯德基|汉堡|披萨|寿司|茶|酒吧|啤酒|food|lunch|dinner|breakfast|brunch|coffee|cafe|restaurant|takeaway|kfc|mcdonald|subway|burger|pizza|sushi|bubble tea|drink|beer|bar\b|food ?court|uber ?eats|doordash/i },
+  { name: '交通', en: 'Transport', emoji: '🚗', re: /打车|出租|滴滴|地铁|公交|巴士|火车|机票|航班|加油|汽油|油费|停车|过路费|车票|修车|保养|uber(?! ?eats)|taxi|bus\b|train|ferry|flight|petrol|gas|fuel|parking|z ?energy|\bbp\b|mobil|gull|caltex|wof|rego|at ?hop|toll/i },
+  { name: '住房', en: 'Housing', emoji: '🏠', re: /房租|租金|水费|电费|燃气|网费|宽带|物业|贷款|房贷|rent|mortgage|power|electricity|water rates|internet|broadband|mercury|genesis|contact energy|rates/i },
+  { name: '通讯', en: 'Phone', emoji: '📱', re: /话费|手机费|流量|充值|spark|one ?nz|2degrees|skinny|phone bill|mobile plan/i },
+  { name: '医疗', en: 'Health', emoji: '💊', re: /医院|看病|药|诊所|牙医|体检|医生|chemist|pharmacy|\bgp\b|doctor|dentist|hospital|medicine|physio/i },
+  { name: '娱乐', en: 'Fun', emoji: '🎬', re: /电影|游戏|ktv|门票|演唱会|景点|会员|音乐|movie|cinema|film|game|concert|ticket|netflix|spotify|disney|youtube premium|event cinemas|hoyts/i },
+  { name: '旅行', en: 'Travel', emoji: '✈️', re: /旅游|旅行|酒店|民宿|住宿|hotel|motel|airbnb|booking\.com|travel|holiday/i },
+  { name: '学习', en: 'Learning', emoji: '📚', re: /书|课程|培训|学费|教材|文具|toastmasters|book|course|tuition|udemy|kindle|whitcoulls|paper ?plus|stationery/i },
+  { name: '爱好', en: 'Hobbies', emoji: '🎸', re: /吉他|琴弦|乐器|摄影|镜头|相机|davinci|达芬奇|guitar|strings|camera|lens|tripod|gym|健身|运动|sport|fitness/i },
+  { name: '日用', en: 'Household', emoji: '🧴', re: /日用|纸巾|洗发|牙膏|洗衣|清洁|家居|宜家|household|warehouse|kmart|mitre ?10|bunnings|briscoes|ikea|farmers|cleaning|tissue|shampoo/i },
+  { name: '服饰', en: 'Apparel', emoji: '👔', re: /衣服|裤子|鞋|帽子|外套|裙|袜|包包|服装|t恤|衬衫|内衣|apparel|cloth|shirt|jacket|coat|shoe|sneaker|jeans|pants|dress|socks|uniqlo|zara|h&m|tommy|hilfiger|skechers|nike|adidas|under ?armou?r|cotton on|glassons|kathmandu/i },
+  { name: '数码', en: 'Tech', emoji: '💻', re: /手机|电脑|耳机|充电|数据线|硬盘|内存卡|sd卡|苹果|三星|大疆|laptop|computer|iphone|ipad|headphone|charger|cable|ssd|hard drive|sd card|noel ?leeming|jb ?hi-?fi|pb ?tech|apple|samsung|dji/i },
+  { name: '美容', en: 'Beauty', emoji: '💇', re: /按摩|spa|massage|理发|剪头|美容|美甲|化妆|护肤|haircut|barber|salon|beauty|cosmetic|skincare|mecca|sephora/i },
+  { name: '人情', en: 'Gifts', emoji: '🎁', re: /红包|礼物|礼金|请客|送礼|份子|捐|gift|present|donation|treat/i },
+  { name: '其他', en: 'Other', emoji: '🏷️', re: /$^/ },
 ];
 export const INCOME_CATS = [
-  { name: '工资', emoji: '💰', re: /工资|薪水|月薪|salary|wage|payroll/i },
-  { name: '培训收入', emoji: '🎤', re: /培训|讲课|课酬|授课|教练|coaching|training|workshop|讲座|咨询费|consult/i },
-  { name: '奖金', emoji: '🏆', re: /奖金|年终|bonus/i },
-  { name: '投资', emoji: '📈', re: /利息|分红|股息|理财|投资|interest|dividend|investment/i },
-  { name: '退款', emoji: '↩️', re: /退款|退货|返现|报销|refund|cashback|reimburse/i },
-  { name: '红包', emoji: '🧧', re: /红包|礼金|gift/i },
-  { name: '其他收入', emoji: '💵', re: /$^/ },
+  { name: '工资', en: 'Salary', emoji: '💰', re: /工资|薪水|月薪|salary|wage|payroll/i },
+  { name: '培训收入', en: 'Training', emoji: '🎤', re: /培训|讲课|课酬|授课|教练|coaching|training|workshop|讲座|咨询费|consult/i },
+  { name: '奖金', en: 'Bonus', emoji: '🏆', re: /奖金|年终|bonus/i },
+  { name: '投资', en: 'Investment', emoji: '📈', re: /利息|分红|股息|理财|投资|interest|dividend|investment/i },
+  { name: '退款', en: 'Refund', emoji: '↩️', re: /退款|退货|返现|报销|refund|cashback|reimburse/i },
+  { name: '红包', en: 'Red packet', emoji: '🧧', re: /红包|礼金|gift/i },
+  { name: '其他收入', en: 'Other income', emoji: '💵', re: /$^/ },
 ];
 const INCOME_RE = /收入|进账|工资|薪水|奖金|收到|入账|到账|退款|报销|利息|分红|讲课费|课酬|赚了|salary|income|refund|received|got paid|bonus|dividend|interest|cashback|reimburs/i;
 
 export const CATEGORY_LIST = EXPENSE_CATS.map(c => c.name);
+
+// 按用户的分类表匹配：先看用户自己写的关键词，再看内置规则。返回分类 id，没匹配到返回 null
+export function matchCategory(list, ...texts) {
+  const t = texts.filter(Boolean).join(' ').toLowerCase();
+  for (const c of list) if (c.kw?.some(k => k && t.includes(k.toLowerCase()))) return c.id;
+  for (const c of list) if (c.re && c.re.test(t)) return c.id;
+  return null;
+}
 
 export function guessCategory(type, ...texts) {
   const t = texts.filter(Boolean).join(' ');
@@ -286,7 +294,10 @@ export function parseExpense(input, opts = {}) {
   if (!item && !store) item = clean(rest);
 
   const category = learned?.category && (learned.type || 'expense') === type
-    ? learned.category : guessCategory(type, store, item, original);
+    ? learned.category
+    : opts.categories?.[type]
+      ? (matchCategory(opts.categories[type], store, item, original) ?? opts.fallback?.[type] ?? guessCategory(type, store, item, original))
+      : guessCategory(type, store, item, original);
 
   return {
     type,

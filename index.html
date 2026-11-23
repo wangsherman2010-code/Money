@@ -14,28 +14,29 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<!-- 带 data-en 的元素在英文界面下换成英文；data-en-ph = placeholder，data-en-aria = aria-label -->
 <div class="app">
   <header class="top">
     <div class="month-nav" id="monthNav">
-      <button class="icon-btn" data-month="-1" aria-label="上个月">‹</button>
+      <button class="icon-btn" data-month="-1" aria-label="上个月" data-en-aria="Previous month">‹</button>
       <button class="month-label" id="monthLabel"></button>
-      <button class="icon-btn" data-month="1" aria-label="下个月">›</button>
+      <button class="icon-btn" data-month="1" aria-label="下个月" data-en-aria="Next month">›</button>
     </div>
-    <button class="icon-btn" id="btnSearch" aria-label="搜索">
+    <button class="icon-btn" id="btnSearch" aria-label="搜索" data-en-aria="Search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
     </button>
   </header>
   <div class="search-row" id="searchRow" hidden>
-    <input id="searchInput" type="search" placeholder="搜索商家、物品、分类、金额…" autocomplete="off">
-    <button class="link" id="btnSearchClose">关闭</button>
+    <input id="searchInput" type="search" placeholder="搜索商家、物品、分类、金额…" data-en-ph="Search store, item, category, amount…" autocomplete="off">
+    <button class="link" id="btnSearchClose" data-en="Close">关闭</button>
   </div>
 
   <!-- 明细 -->
   <section class="view" id="view-trans">
     <nav class="tabs" id="transTabs">
-      <button data-tab="daily" class="on">每日</button>
-      <button data-tab="calendar">日历</button>
-      <button data-tab="monthly">月度</button>
+      <button data-tab="daily" class="on" data-en="Daily">每日</button>
+      <button data-tab="calendar" data-en="Calendar">日历</button>
+      <button data-tab="monthly" data-en="Monthly">月度</button>
     </nav>
     <div class="totals" id="totals"></div>
     <div id="transBody"></div>
@@ -44,8 +45,8 @@
   <!-- 统计 -->
   <section class="view" id="view-stats" hidden>
     <nav class="tabs" id="statsTabs">
-      <button data-kind="expense" class="on">支出</button>
-      <button data-kind="income">收入</button>
+      <button data-kind="expense" class="on" data-en="Expenses">支出</button>
+      <button data-kind="income" data-en="Income">收入</button>
     </nav>
     <div id="statsBody"></div>
   </section>
@@ -58,72 +59,91 @@
   <!-- 设置 -->
   <section class="view" id="view-settings" hidden>
     <div class="settings">
-      <h2>识别</h2>
-      <label class="row">识别方式
+      <h2 data-en="Language">语言</h2>
+      <div class="row">
+        <div class="chips" id="langChips">
+          <label class="chip"><input type="radio" name="lang" value="zh">中文</label>
+          <label class="chip"><input type="radio" name="lang" value="en">English</label>
+        </div>
+      </div>
+
+      <h2 data-en="Recognition">识别</h2>
+      <label class="row"><span data-en="How to understand your sentence">识别方式</span>
         <select id="setParser">
-          <option value="local">本地规则（免费、离线）</option>
-          <option value="ai">AI（Claude，更聪明，需要 API Key）</option>
+          <option value="local" data-en="Built-in rules (free, offline)">本地规则（免费、离线）</option>
+          <option value="ai" data-en="AI (Claude, smarter, needs API key)">AI（Claude，更聪明，需要 API Key）</option>
         </select>
       </label>
       <div id="aiSettings">
         <label class="row">Anthropic API Key
           <input id="setApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
         </label>
-        <label class="row">AI 模型
+        <label class="row"><span data-en="AI model">AI 模型</span>
           <select id="setModel">
-            <option value="claude-opus-5-5">Claude Opus 5.5（最准）</option>
-            <option value="claude-sonnet-5-5">Claude Sonnet 5.5（便宜一半）</option>
-            <option value="claude-haiku-5-5">Claude Haiku 5.5（最便宜、最快）</option>
+            <option value="claude-opus-5-5" data-en="Claude Opus 5.5 (most accurate)">Claude Opus 5.5（最准）</option>
+            <option value="claude-sonnet-5-5" data-en="Claude Sonnet 5.5 (half the price)">Claude Sonnet 5.5（便宜一半）</option>
+            <option value="claude-haiku-5-5" data-en="Claude Haiku 5.5 (cheapest, fastest)">Claude Haiku 5.5（最便宜、最快）</option>
           </select>
         </label>
-        <p class="small">Key 只保存在这台设备上，直接发给 Anthropic。没网或出错时会自动改用本地规则。</p>
+        <p class="small" data-en="Your key stays on this device and is sent only to Anthropic. If offline or on error, built-in rules are used.">Key 只保存在这台设备上，直接发给 Anthropic。没网或出错时会自动改用本地规则。</p>
       </div>
-      <label class="row switch">保存前先让我确认
+      <label class="row switch"><span data-en="Let me confirm before saving">保存前先让我确认</span>
         <input type="checkbox" id="setConfirm">
       </label>
 
-      <h2>货币与账户</h2>
-      <div class="row">我用的货币（勾选的会出现在记账面板里）
+      <h2 data-en="Categories">分类</h2>
+      <button class="btn block-btn" id="btnCats" data-en="Edit categories (name, icon, keywords, order)">编辑分类（名称、图标、关键词、顺序）</button>
+
+      <h2 data-en="Currencies &amp; accounts">货币与账户</h2>
+      <div class="row"><span data-en="Currencies I use (ticked ones show when recording)">我用的货币（勾选的会出现在记账面板里）</span>
         <div class="chips" id="curChips"></div>
       </div>
-      <label class="row">统计用的主货币
+      <label class="row"><span data-en="Main currency for totals">统计用的主货币</span>
         <select id="setMainCur"></select>
       </label>
-      <label class="row">没说币种时默认
+      <label class="row"><span data-en="Default when no currency is said">没说币种时默认</span>
         <select id="setDefaultCur"></select>
       </label>
-      <div class="row"><span class="inline" style="justify-content:space-between;align-items:center">汇率<button class="btn" id="btnRate">在线更新</button></span>
+      <div class="row"><span class="inline" style="justify-content:space-between;align-items:center"><span data-en="Exchange rates">汇率</span><button class="btn" id="btnRate" data-en="Update online">在线更新</button></span>
         <div id="rateList"></div>
       </div>
-      <label class="row">账户（用逗号分开）
-        <input id="setAccounts" placeholder="卡, 现金, 微信, 支付宝">
+      <label class="row"><span data-en="Accounts (comma separated)">账户（用逗号分开）</span>
+        <input id="setAccounts" placeholder="卡, 现金, 微信, 支付宝" data-en-ph="Card, Cash, WeChat, Alipay">
       </label>
-      <label class="row">默认账户
+      <label class="row"><span data-en="Default account">默认账户</span>
         <select id="setDefaultAcc"></select>
       </label>
-      <h2>外观</h2>
-      <div class="row">文字大小
+
+      <h2 data-en="Appearance">外观</h2>
+      <div class="row"><span data-en="Text size">文字大小</span>
         <div class="chips" id="fsChips"></div>
       </div>
-      <div class="row">文字粗细
+      <div class="row"><span data-en="Text weight">文字粗细</span>
         <div class="chips" id="fwChips"></div>
       </div>
-      <label class="row">字体
+      <label class="row"><span data-en="Chinese font">中文字体</span>
         <select id="setFont"></select>
       </label>
-      <div class="preview" id="fontPreview"><span class="amt">NZ$41.00</span><div>Woolworth Westgate 买菜</div><div class="t2">2026 年 11 月 · 卡 · 1 英镑 = 9.12 人民币</div></div>
-      <label class="row">深浅色
-        <select id="setTheme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+      <label class="row"><span data-en="English font">英文字体</span>
+        <select id="setFontEn"></select>
+      </label>
+      <div class="preview" id="fontPreview"><span class="amt">NZ$41.00</span><div>Woolworth Westgate 买菜 Groceries</div><div class="t2">2026 · 卡 Card · 1 GBP = 9.12 CNY</div></div>
+      <label class="row"><span data-en="Light / dark">深浅色</span>
+        <select id="setTheme">
+          <option value="auto" data-en="Follow system">跟随系统</option>
+          <option value="light" data-en="Light">浅色</option>
+          <option value="dark" data-en="Dark">深色</option>
+        </select>
       </label>
 
-      <h2>数据</h2>
+      <h2 data-en="Data">数据</h2>
       <div class="grid2">
-        <label class="btn file-btn">导入 Money 的 Excel<input type="file" id="fileImport" accept=".xls,.xlsx,.csv,.tsv" hidden></label>
-        <button class="btn" id="btnCsv">导出 CSV</button>
-        <button class="btn" id="btnBackup">备份 JSON</button>
-        <label class="btn file-btn">恢复备份<input type="file" id="fileRestore" accept=".json,application/json" hidden></label>
-        <button class="btn" id="btnForget">清除已学会的商家</button>
-        <button class="btn danger" id="btnClear">清空全部记录</button>
+        <label class="btn file-btn"><span data-en="Import Money Excel">导入 Money 的 Excel</span><input type="file" id="fileImport" accept=".xls,.xlsx,.csv,.tsv" hidden></label>
+        <button class="btn" id="btnCsv" data-en="Export CSV">导出 CSV</button>
+        <button class="btn" id="btnBackup" data-en="Back up (JSON)">备份 JSON</button>
+        <label class="btn file-btn"><span data-en="Restore backup">恢复备份</span><input type="file" id="fileRestore" accept=".json,application/json" hidden></label>
+        <button class="btn" id="btnForget" data-en="Forget learned stores">清除已学会的商家</button>
+        <button class="btn danger" id="btnClear" data-en="Delete all records">清空全部记录</button>
       </div>
       <p class="small" id="dataInfo"></p>
     </div>
@@ -134,35 +154,52 @@
 <div class="composer">
   <div class="live" id="live" hidden></div>
   <form class="compose-row" id="composeForm">
-    <button type="button" class="mic" id="btnMic" aria-label="语音输入">
+    <button type="button" class="mic" id="btnMic" aria-label="语音输入" data-en-aria="Voice input">
       <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
     </button>
-    <textarea id="composeInput" rows="1" placeholder="一句话记一笔：Countdown 买菜 41" enterkeyhint="send"></textarea>
-    <button type="submit" class="send" id="btnSend" aria-label="记账">
+    <textarea id="composeInput" rows="1" placeholder="一句话记一笔：Countdown 买菜 41" data-en-ph="One line: Countdown groceries 41" enterkeyhint="send"></textarea>
+    <button type="submit" class="send" id="btnSend" aria-label="记账" data-en-aria="Record">
       <svg viewBox="0 0 24 24"><path d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z"/></svg>
     </button>
   </form>
   <nav class="bottom-nav" id="bottomNav">
-    <button data-view="trans" class="on"><span>📒</span>明细</button>
-    <button data-view="stats"><span>📊</span>统计</button>
-    <button data-view="accounts"><span>💳</span>账户</button>
-    <button data-view="settings"><span>⚙️</span>设置</button>
+    <button data-view="trans" class="on"><span>📒</span><b data-en="Records">明细</b></button>
+    <button data-view="stats"><span>📊</span><b data-en="Stats">统计</b></button>
+    <button data-view="accounts"><span>💳</span><b data-en="Accounts">账户</b></button>
+    <button data-view="settings"><span>⚙️</span><b data-en="Settings">设置</b></button>
   </nav>
 </div>
 
-<!-- 确认 / 编辑 -->
+<!-- 确认 / 编辑记录 -->
 <dialog id="sheet" class="sheet">
   <form method="dialog" id="sheetForm">
     <div class="sheet-head">
-      <h2 id="sheetTitle" tabindex="-1" autofocus>确认记录</h2>
-      <button value="cancel" class="link" formnovalidate>取消</button>
+      <h2 id="sheetTitle" tabindex="-1" autofocus></h2>
+      <button value="cancel" class="link" formnovalidate data-en="Cancel">取消</button>
     </div>
     <div id="sheetCards"></div>
     <div class="sheet-actions">
-      <button type="button" class="btn danger" id="btnDelete" hidden>删除</button>
-      <button type="submit" value="save" class="btn primary" id="btnSave">保存</button>
+      <button type="button" class="btn danger" id="btnDelete" hidden data-en="Delete">删除</button>
+      <button type="submit" value="save" class="btn primary" id="btnSave"></button>
     </div>
   </form>
+</dialog>
+
+<!-- 编辑分类 -->
+<dialog id="catDialog" class="sheet">
+  <div class="cat-wrap">
+    <div class="sheet-head">
+      <h2 tabindex="-1" autofocus data-en="Edit categories">编辑分类</h2>
+      <button class="link" id="btnCatsDone" data-en="Done">完成</button>
+    </div>
+    <nav class="tabs" id="catTabs">
+      <button data-kind="expense" class="on" data-en="Expenses">支出</button>
+      <button data-kind="income" data-en="Income">收入</button>
+    </nav>
+    <p class="small" data-en="Keywords help auto-recognition: e.g. a “Pets” category with keywords “pet, vet, 猫粮” catches “Animates cat food 45”. Changes save automatically.">关键词帮助自动识别：比如“宠物”分类写上“猫粮, 宠物, pet, vet”，以后输入“Animates 猫粮 45”就会归到宠物。改动会自动保存。</p>
+    <div id="catList"></div>
+    <button class="btn" id="btnCatAdd" data-en="+ Add category">＋ 新建分类</button>
+  </div>
 </dialog>
 
 <div id="toast" class="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastAction" class="link" hidden></button></div>

@@ -1,20 +1,20 @@
 // 货币表：代码、符号、中文名、可识别的说法、小数位、默认汇率（1 纽币 = ? 该货币，在线更新后会被替换）
 export const CURRENCIES = {
-  CNY: { sym: '¥',   name: '人民币',   dec: 2, rate: 4.1,   words: ['人民币', 'RMB', 'CNY', '块钱', '块', '元', '毛', '角'], prefix: ['¥', '￥', 'CN¥'] },
-  NZD: { sym: 'NZ$', name: '纽币',     dec: 2, rate: 1,     words: ['新西兰元', '新西兰币', '纽西兰元', '纽币', '纽元', '纽刀', 'NZD'], prefix: ['NZ$'] },
-  USD: { sym: 'US$', name: '美元',     dec: 2, rate: 0.58,  words: ['美元', '美金', '美刀', 'USD', 'US dollars?'], prefix: ['US$', 'U$'] },
-  GBP: { sym: '£',   name: '英镑',     dec: 2, rate: 0.45,  words: ['英镑', '镑', 'GBP', 'pounds?', 'quid'], prefix: ['£'] },
-  EUR: { sym: '€',   name: '欧元',     dec: 2, rate: 0.51,  words: ['欧元', 'EUR', 'euros?'], prefix: ['€'] },
-  AUD: { sym: 'A$',  name: '澳元',     dec: 2, rate: 0.89,  words: ['澳元', '澳币', '澳大利亚元', 'AUD'], prefix: ['A$', 'AU$'] },
-  JPY: { sym: 'JP¥', name: '日元',     dec: 0, rate: 88,    words: ['日元', '日币', '円', 'JPY', 'yen'], prefix: ['JP¥'] },
-  HKD: { sym: 'HK$', name: '港币',     dec: 2, rate: 4.5,   words: ['港币', '港元', '港纸', 'HKD'], prefix: ['HK$'] },
-  CAD: { sym: 'C$',  name: '加元',     dec: 2, rate: 0.8,   words: ['加元', '加币', '加拿大元', 'CAD'], prefix: ['C$', 'CA$'] },
-  SGD: { sym: 'S$',  name: '新加坡元', dec: 2, rate: 0.76,  words: ['新加坡元', '新加坡币', '新币', 'SGD'], prefix: ['S$'] },
-  TWD: { sym: 'NT$', name: '新台币',   dec: 0, rate: 18.5,  words: ['新台币', '台币', 'TWD', 'NTD'], prefix: ['NT$'] },
-  KRW: { sym: '₩',   name: '韩元',     dec: 0, rate: 820,   words: ['韩元', '韩币', 'KRW', 'won'], prefix: ['₩'] },
-  THB: { sym: '฿',   name: '泰铢',     dec: 2, rate: 20,    words: ['泰铢', 'THB', 'baht'], prefix: ['฿'] },
-  MYR: { sym: 'RM',  name: '马币',     dec: 2, rate: 2.6,   words: ['马币', '令吉', '林吉特', 'MYR', 'ringgit'], prefix: ['RM'] },
-  CHF: { sym: 'CHF', name: '瑞士法郎', dec: 2, rate: 0.47,  words: ['瑞士法郎', '法郎', 'CHF', 'francs?'], prefix: [] },
+  CNY: { sym: '¥',   name: '人民币', en: 'Chinese yuan',   dec: 2, rate: 4.1,   words: ['人民币', 'RMB', 'CNY', '块钱', '块', '元', '毛', '角'], prefix: ['¥', '￥', 'CN¥'] },
+  NZD: { sym: 'NZ$', name: '纽币', en: 'NZ dollar',     dec: 2, rate: 1,     words: ['新西兰元', '新西兰币', '纽西兰元', '纽币', '纽元', '纽刀', 'NZD'], prefix: ['NZ$'] },
+  USD: { sym: 'US$', name: '美元', en: 'US dollar',     dec: 2, rate: 0.58,  words: ['美元', '美金', '美刀', 'USD', 'US dollars?'], prefix: ['US$', 'U$'] },
+  GBP: { sym: '£',   name: '英镑', en: 'British pound',     dec: 2, rate: 0.45,  words: ['英镑', '镑', 'GBP', 'pounds?', 'quid'], prefix: ['£'] },
+  EUR: { sym: '€',   name: '欧元', en: 'Euro',     dec: 2, rate: 0.51,  words: ['欧元', 'EUR', 'euros?'], prefix: ['€'] },
+  AUD: { sym: 'A$',  name: '澳元', en: 'Australian dollar',     dec: 2, rate: 0.89,  words: ['澳元', '澳币', '澳大利亚元', 'AUD'], prefix: ['A$', 'AU$'] },
+  JPY: { sym: 'JP¥', name: '日元', en: 'Japanese yen',     dec: 0, rate: 88,    words: ['日元', '日币', '円', 'JPY', 'yen'], prefix: ['JP¥'] },
+  HKD: { sym: 'HK$', name: '港币', en: 'HK dollar',     dec: 2, rate: 4.5,   words: ['港币', '港元', '港纸', 'HKD'], prefix: ['HK$'] },
+  CAD: { sym: 'C$',  name: '加元', en: 'Canadian dollar',     dec: 2, rate: 0.8,   words: ['加元', '加币', '加拿大元', 'CAD'], prefix: ['C$', 'CA$'] },
+  SGD: { sym: 'S$',  name: '新加坡元', en: 'Singapore dollar', dec: 2, rate: 0.76,  words: ['新加坡元', '新加坡币', '新币', 'SGD'], prefix: ['S$'] },
+  TWD: { sym: 'NT$', name: '新台币', en: 'Taiwan dollar',   dec: 0, rate: 18.5,  words: ['新台币', '台币', 'TWD', 'NTD'], prefix: ['NT$'] },
+  KRW: { sym: '₩',   name: '韩元', en: 'Korean won',     dec: 0, rate: 820,   words: ['韩元', '韩币', 'KRW', 'won'], prefix: ['₩'] },
+  THB: { sym: '฿',   name: '泰铢', en: 'Thai baht',     dec: 2, rate: 20,    words: ['泰铢', 'THB', 'baht'], prefix: ['฿'] },
+  MYR: { sym: 'RM',  name: '马币', en: 'Malaysian ringgit',     dec: 2, rate: 2.6,   words: ['马币', '令吉', '林吉特', 'MYR', 'ringgit'], prefix: ['RM'] },
+  CHF: { sym: 'CHF', name: '瑞士法郎', en: 'Swiss franc', dec: 2, rate: 0.47,  words: ['瑞士法郎', '法郎', 'CHF', 'francs?'], prefix: [] },
 };
 export const CODES = Object.keys(CURRENCIES);
 
@@ -54,5 +54,5 @@ export const dollarFor = def => ['NZD', 'USD', 'AUD', 'CAD', 'HKD', 'SGD', 'TWD'
 
 export const sym = c => CURRENCIES[c]?.sym ?? c + ' ';
 export const dec = c => CURRENCIES[c]?.dec ?? 2;
-export const cname = c => CURRENCIES[c]?.name ?? c;
+export const cname = (c, en = false) => (en ? CURRENCIES[c]?.en : CURRENCIES[c]?.name) ?? c;
 export const defaultRates = () => Object.fromEntries(CODES.map(c => [c, CURRENCIES[c].rate]));

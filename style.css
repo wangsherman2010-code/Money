@@ -208,3 +208,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 :root[data-big] .rec .cat b { font-size: calc(20px * var(--fs)); }
 :root[data-big] .catrow { grid-template-columns: 1.4em 1fr 7.4em; }
 :root[data-big] .catrow .bar { grid-column: 1 / -1; grid-row: 2; }
+
+/* 编辑分类 */
+.cat-wrap { padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+.cat-wrap .tabs { padding: 0; margin-bottom: 8px; }
+#catDialog { max-height: 94vh; }
+.catedit { background: var(--card); border-radius: 12px; padding: 8px; margin-bottom: 8px; box-shadow: var(--shadow);
+  display: grid; grid-template-columns: 2.6em 1fr 1fr; gap: 6px; align-items: center; }
+.catedit input { min-height: 38px; padding: 5px 9px; background: var(--raised); min-width: 0; }
+.catedit .emoji { text-align: center; font-size: calc(20px * var(--fs)); padding: 2px; }
+.catedit .kw { grid-column: 1 / 3; font-size: calc(14px * var(--fs)); }
+.catedit .cnt { grid-column: 1 / -1; font-size: calc(12px * var(--fs)); color: var(--muted); }
+.cat-btns { display: flex; gap: 4px; justify-content: flex-end; }
+.cat-btns button { flex: 1; max-width: 40px; height: 38px; border: 1px solid var(--line); background: var(--raised); border-radius: 8px; cursor: pointer; font-size: calc(15px * var(--fs)); color: var(--text); }
+.cat-btns button:disabled { opacity: .3; cursor: default; }
+.cat-btns .del { color: var(--danger); }
+#btnCatAdd { width: 100%; margin-top: 4px; }
+.block-btn { width: 100%; }
+.bottom-nav b { font-weight: inherit; }

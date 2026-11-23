@@ -13,6 +13,8 @@ async function getClient(apiKey) {
   return clientPromise;
 }
 
+const fmtCat = c => `${c.id} = ${c.label}${c.kw?.length ? '：' + c.kw.join('、') : ''}`;
+
 export async function aiParse(text, ctx) {
   const { apiKey, model, today, defaultCurrency, currencies = ['NZD', 'CNY'], defaultAccount, accounts, expenseCats, incomeCats, knownStores } = ctx;
   const client = await getClient(apiKey);
@@ -35,7 +37,7 @@ export async function aiParse(text, ctx) {
             item: { type: 'string', description: '买了什么/什么收入，简短，没有就空字符串' },
             amount: { type: 'number' },
             currency: { type: 'string', enum: CODES },
-            category: { type: 'string', enum: [...new Set([...expenseCats, ...incomeCats])] },
+            category: { type: 'string', enum: [...new Set([...expenseCats, ...incomeCats].map(c => c.id))] },
             account: { type: 'string', enum: accounts.length ? accounts : [''] },
           },
         },
@@ -51,7 +53,8 @@ export async function aiParse(text, ctx) {
   只写 "$" 或 "dollar" 时，按地点判断（美国→USD，澳洲→AUD 等），看不出来就用 NZD。
   完全没说币种时：用微信或支付宝付的用 CNY；提到了外国城市/国家就用当地货币；否则用 ${defaultCurrency}。
 - 收入（工资、收到培训费、退款、利息等）type=income，用收入分类；其余为 expense，用支出分类。
-- 支出分类只能是：${expenseCats.join('、')}。收入分类只能是：${incomeCats.join('、')}。
+- category 填分类的 id。支出分类（id = 名称：关键词）：${expenseCats.map(fmtCat).join('；')}。
+  收入分类：${incomeCats.map(fmtCat).join('；')}。
 - 账户只能是：${accounts.join('、')}。没提到就用「${defaultAccount}」。
 - store 是商家或地点（保留原文大小写，比如 "Woolworth Westgate"）；item 是买的东西，简短，保持用户原来的语言。人名（比如给谁买的）放进 item，不要当商家。
 - 一句里有几笔不同的钱就输出几条；"一共/总共"只算一条。

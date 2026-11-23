@@ -1,4 +1,4 @@
-import { parseMany, EXPENSE_CATS, INCOME_CATS, guessCategory, memoryKey } from './parser.js';
+import { parseMany, EXPENSE_CATS, INCOME_CATS, matchCategory, memoryKey } from './parser.js';
 import { CURRENCIES, CODES, sym, dec, cname, defaultRates } from './currencies.js';
 
 const $ = s => document.querySelector(s);
@@ -6,18 +6,18 @@ const $$ = s => [...document.querySelectorAll(s)];
 const KEY = 'voice-ledger.records.v1';
 const SKEY = 'voice-ledger.settings.v1';
 const MKEY = 'voice-ledger.memory.v1';
-const WD = ['日', '一', '二', '三', '四', '五', '六'];
 
 /* ---------------- 存储 ---------------- */
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('保存失败：' + e.message); } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast(L('保存失败：', 'Could not save: ') + e.message); } },
 };
 let settings = {
+  lang: 'zh',
   parser: 'local', apiKey: '', model: 'claude-opus-5-5', confirm: true,
   mainCurrency: 'CNY', defaultCurrency: 'NZD', currencies: ['NZD', 'CNY'],
   accounts: ['卡', '现金', '微信', '支付宝'], defaultAccount: '卡', theme: 'auto',
-  fontSize: 1, fontWeight: 'medium', font: 'system',
+  fontSize: 1, fontWeight: 'medium', font: 'system', fontEn: 'same',
   ...store.get(SKEY, {}),
 };
 // 汇率：rates[X] = 1 纽币能换多少 X。旧版只有 settings.rate（1 NZD = ? CNY）
@@ -31,6 +31,61 @@ const saveRecords = () => store.set(KEY, records);
 const saveSettings = () => store.set(SKEY, settings);
 const saveMemory = () => store.set(MKEY, memory);
 
+/* ---------------- 语言 ---------------- */
+const isEn = () => settings.lang === 'en';
+const L = (zh, en) => isEn() ? en : zh;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WD_ZH = ['日', '一', '二', '三', '四', '五', '六'], WD_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const monthName = m => L(`${m}月`, MON[m - 1]);                         // m: 1-12
+const monthYear = (y, m) => L(`${y} 年 ${m} 月`, `${MON[m - 1]} ${y}`);
+const curName = c => cname(c, isEn());
+
+// 页面上写死的文字：第一次运行时把中文存到 data-zh，之后按语言切换
+function applyStaticText() {
+  document.documentElement.lang = isEn() ? 'en' : 'zh-CN';
+  document.title = L('一句话记账', 'One-line Ledger');
+  for (const el of $$('[data-en]')) {
+    if (el.dataset.zh == null) el.dataset.zh = el.textContent;
+    el.textContent = isEn() ? el.dataset.en : el.dataset.zh;
+  }
+  for (const el of $$('[data-en-ph]')) {
+    if (el.dataset.zhPh == null) el.dataset.zhPh = el.placeholder;
+    el.placeholder = isEn() ? el.dataset.enPh : el.dataset.zhPh;
+  }
+  for (const el of $$('[data-en-aria]')) {
+    if (el.dataset.zhAria == null) el.dataset.zhAria = el.getAttribute('aria-label');
+    el.setAttribute('aria-label', isEn() ? el.dataset.enAria : el.dataset.zhAria);
+  }
+}
+
+/* ---------------- 分类（可编辑） ---------------- */
+// settings.cats = { expense: [{ id, zh, en, emoji, kw: '逗号分隔关键词' }], income: [...] }
+// 内置分类的 id 就是原来的中文名，所以旧记录不用改
+const BUILTIN = Object.fromEntries([...EXPENSE_CATS, ...INCOME_CATS].map(c => [c.name, c]));
+const defaultCats = list => list.map(c => ({ id: c.name, zh: c.name, en: c.en, emoji: c.emoji, kw: '' }));
+if (!settings.cats) settings.cats = { expense: defaultCats(EXPENSE_CATS), income: defaultCats(INCOME_CATS) };
+// 记录里出现、但分类表里没有的（比如导入的），自动补成自定义分类
+function adoptUnknownCats() {
+  let changed = false;
+  for (const r of records) {
+    const list = settings.cats[r.type] || settings.cats.expense;
+    if (r.category && !list.some(c => c.id === r.category)) {
+      list.splice(Math.max(0, list.length - 1), 0, { id: r.category, zh: r.category, en: r.category, emoji: '🏷️', kw: '' });
+      changed = true;
+    }
+  }
+  if (changed) saveSettings();
+}
+adoptUnknownCats();
+const kwList = s => String(s || '').split(/[,，、;；\n]/).map(x => x.trim()).filter(Boolean);
+const catsOf = type => settings.cats[type] || [];
+const findCat = (type, id) => catsOf(type).find(c => c.id === id) || catsOf(type === 'income' ? 'expense' : 'income').find(c => c.id === id);
+const catLabel = (type, id) => { const c = findCat(type, id); return c ? (L(c.zh || c.en, c.en || c.zh) || id) : id; };
+const catEmoji = (type, id) => findCat(type, id)?.emoji || '🏷️';
+const fallbackCat = type => { const l = catsOf(type); return (l.find(c => c.id === '其他' || c.id === '其他收入') || l[l.length - 1])?.id || ''; };
+const matcherList = type => catsOf(type).map(c => ({ id: c.id, kw: kwList(c.kw), re: BUILTIN[c.id]?.re || null }));
+const guess = (type, ...texts) => matchCategory(matcherList(type), ...texts) ?? fallbackCat(type);
+
 /* ---------------- 工具 ---------------- */
 const pad = n => String(n).padStart(2, '0');
 const dstr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -41,13 +96,15 @@ const uid = () => crypto.randomUUID?.() || String(Date.now()) + Math.random().to
 const r2 = n => Math.round(n * 100) / 100;
 function money(n, cur, { sign = false } = {}) {
   const d = dec(cur);
-  const s = Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   return `${sign && n < 0 ? '-' : ''}${sym(cur)}${s}`;
 }
 function short(n, cur) {
   const a = Math.abs(n);
-  const s = a >= 10000 ? (a / 10000).toFixed(1) + '万' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : a.toFixed(a < 100 ? 1 : 0);
-  return sym(cur) + s.replace(/\.0(?=[k万]?$)/, '');
+  let s;
+  if (isEn()) s = a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : a.toFixed(a < 100 ? 1 : 0);
+  else s = a >= 10000 ? (a / 10000).toFixed(1) + '万' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : a.toFixed(a < 100 ? 1 : 0);
+  return sym(cur) + s.replace(/\.0(?=[kM万]?$)/, '');
 }
 function toMain(amount, cur) {
   const main = settings.mainCurrency;
@@ -55,19 +112,14 @@ function toMain(amount, cur) {
   const from = +settings.rates[cur], to = +settings.rates[main];
   return from && to ? amount / from * to : amount;
 }
-const catInfo = (type, name) => (type === 'income' ? INCOME_CATS : EXPENSE_CATS).find(c => c.name === name)
-  || EXPENSE_CATS.concat(INCOME_CATS).find(c => c.name === name) || { name, emoji: '🏷️' };
-const allCats = type => {
-  const base = (type === 'income' ? INCOME_CATS : EXPENSE_CATS).map(c => c.name);
-  const extra = records.filter(r => r.type === type).map(r => r.category).filter(c => c && !base.includes(c));
-  return [...base, ...new Set(extra)];
-};
 // 1 单位 cur 值多少主货币
 const perMain = cur => (+settings.rates[settings.mainCurrency]) / (+settings.rates[cur]);
 const fmtRate = v => v >= 100 ? v.toFixed(2) : v >= 1 ? v.toFixed(4).replace(/0+$/, '').replace(/\.$/, '') : v.toPrecision(4);
 function rateNote(rows) {
   const used = [...new Set(rows.map(r => r.currency))].filter(c => c !== settings.mainCurrency);
-  return used.length ? '（' + used.map(c => `1 ${c} = ${fmtRate(perMain(c))} ${settings.mainCurrency}`).join('，') + '）' : '';
+  if (!used.length) return '';
+  const parts = used.map(c => `1 ${c} = ${fmtRate(perMain(c))} ${settings.mainCurrency}`);
+  return L('（' + parts.join('，') + '）', ' (' + parts.join(', ') + ')');
 }
 function sums(rows) {
   let inc = 0, exp = 0;
@@ -85,10 +137,11 @@ function toast(msg, action) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $('#toast').classList.remove('show'), action ? 5000 : 2400);
 }
+const undoLabel = () => L('撤销', 'Undo');
 
 /* ---------------- 状态 ---------------- */
 const now = new Date();
-const state = { view: 'trans', tab: 'daily', month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, statsKind: 'expense', search: '', selDay: null, catFilter: null };
+const state = { view: 'trans', tab: 'daily', month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, statsKind: 'expense', search: '', selDay: null, catFilter: null, catKind: 'expense' };
 
 function shiftMonth(delta) {
   if (state.tab === 'monthly' && state.view === 'trans') { state.month = `${+state.month.slice(0, 4) + delta}${state.month.slice(4)}`; }
@@ -103,9 +156,9 @@ function shiftMonth(delta) {
 
 /* ---------------- 渲染 ---------------- */
 function render() {
-  const [y, m] = state.month.split('-');
+  const [y, m] = state.month.split('-').map(Number);
   const yearMode = state.view === 'trans' && state.tab === 'monthly';
-  $('#monthLabel').textContent = state.search ? '搜索结果' : yearMode ? `${y} 年` : `${y} 年 ${+m} 月`;
+  $('#monthLabel').textContent = state.search ? L('搜索结果', 'Search results') : yearMode ? L(`${y} 年`, `${y}`) : monthYear(y, m);
   $('#monthNav').style.visibility = state.view === 'settings' ? 'hidden' : '';
   $('#composeForm').hidden = state.view === 'settings';
   $$('.view').forEach(v => v.hidden = v.id !== 'view-' + state.view);
@@ -120,7 +173,8 @@ function render() {
 }
 
 function matchesSearch(r, q) {
-  const hay = [r.store, r.item, r.category, r.account, r.note, String(r.amount), r.date].join(' ').toLowerCase();
+  const c = findCat(r.type, r.category);
+  const hay = [r.store, r.item, r.category, c?.zh, c?.en, r.account, r.note, String(r.amount), r.date].join(' ').toLowerCase();
   return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => hay.includes(w));
 }
 const sortRecs = rows => rows.sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
@@ -131,9 +185,9 @@ function monthRows() {
 
 function totalsHtml(rows) {
   const s = sums(rows), c = settings.mainCurrency;
-  return `<div><div class="l">收入</div><div class="v inc">${money(s.inc, c)}</div></div>
-    <div><div class="l">支出</div><div class="v exp">${money(s.exp, c)}</div></div>
-    <div><div class="l">结余</div><div class="v">${money(s.bal, c, { sign: true })}</div></div>`;
+  return `<div><div class="l">${L('收入', 'Income')}</div><div class="v inc">${money(s.inc, c)}</div></div>
+    <div><div class="l">${L('支出', 'Expenses')}</div><div class="v exp">${money(s.exp, c)}</div></div>
+    <div><div class="l">${L('结余', 'Balance')}</div><div class="v">${money(s.bal, c, { sign: true })}</div></div>`;
 }
 
 function dayListHtml(rows) {
@@ -144,19 +198,20 @@ function dayListHtml(rows) {
   let html = '';
   for (const [date, list] of byDay) {
     const d = new Date(date + 'T00:00:00'), s = sums(list), isToday = date === todayStr();
+    const wd = isToday ? L('今天', 'Today') : L('周' + WD_ZH[d.getDay()], WD_EN[d.getDay()]);
+    const sub = state.search ? (isEn() ? `${MON[d.getMonth()]} ${d.getFullYear()}` : date.slice(0, 7).replace('-', '.')) : monthName(d.getMonth() + 1);
     html += `<div class="day"><div class="day-head">
-      <span class="d">${d.getDate()}</span><span class="wd ${isToday ? 'today' : ''}">${isToday ? '今天' : '周' + WD[d.getDay()]}</span>
-      <span class="small" style="margin:0">${state.search ? date.slice(0, 7).replace('-', '.') : `${d.getMonth() + 1}月`}</span>
+      <span class="d">${d.getDate()}</span><span class="wd ${isToday ? 'today' : ''}">${wd}</span>
+      <span class="small" style="margin:0">${sub}</span>
       <span class="sums">${s.inc ? `<span class="inc">${money(s.inc, c)}</span>` : ''}${s.exp ? `<span class="exp">${money(s.exp, c)}</span>` : ''}</span>
     </div>`;
     for (const r of list) {
-      const ci = catInfo(r.type, r.category);
-      const title = r.store || r.item || '（未填写）';
-      const sub = [r.store ? r.item : '', r.account].filter(Boolean).join(' · ');
+      const title = r.store || r.item || L('（未填写）', '(blank)');
+      const subline = [r.store ? r.item : '', r.account].filter(Boolean).join(' · ');
       const conv = r.currency !== c ? `<small>≈ ${money(toMain(r.amount, r.currency), c)}</small>` : '';
       html += `<div class="rec" data-id="${esc(r.id)}">
-        <div class="cat"><b>${ci.emoji}</b>${esc(r.category)}</div>
-        <div class="main"><div class="t1">${esc(title)}</div>${sub ? `<div class="t2">${esc(sub)}</div>` : ''}</div>
+        <div class="cat"><b>${catEmoji(r.type, r.category)}</b>${esc(catLabel(r.type, r.category))}</div>
+        <div class="main"><div class="t1">${esc(title)}</div>${subline ? `<div class="t2">${esc(subline)}</div>` : ''}</div>
         <div class="amt ${r.type === 'income' ? 'inc' : 'exp'}">${money(r.amount, r.currency)}${conv}</div>
       </div>`;
     }
@@ -165,7 +220,9 @@ function dayListHtml(rows) {
   return html;
 }
 
-const EMPTY = `<div class="empty">这个月还没有记录。<br>在下面输入一句话，比如<br><b>Woolworth Westgate 买菜 41</b><br><b>昨天在麦当劳吃午饭 35 块 微信</b><br><b>收到培训费 3000 纽币</b></div>`;
+const emptyHtml = () => L(
+  `<div class="empty">这个月还没有记录。<br>在下面输入一句话，比如<br><b>Woolworth Westgate 买菜 41</b><br><b>昨天在麦当劳吃午饭 35 块 微信</b><br><b>收到培训费 3000 纽币</b></div>`,
+  `<div class="empty">No records this month yet.<br>Type one line below, for example<br><b>Woolworth Westgate groceries 41</b><br><b>Lunch at Sushi Bar 18 cash</b><br><b>Tesco sandwich £4.50</b></div>`);
 
 function renderTrans() {
   let rows = monthRows();
@@ -176,24 +233,24 @@ function renderTrans() {
     const yearRows = records.filter(r => r.date.startsWith(y));
     $('#totals').innerHTML = totalsHtml(yearRows);
     const c = settings.mainCurrency;
-    let html = '<div class="months"><div class="mrow head"><span class="m">月份</span><span>收入</span><span>支出</span><span>结余</span></div>';
+    let html = `<div class="months"><div class="mrow head"><span class="m">${L('月份', 'Month')}</span><span>${L('收入', 'Income')}</span><span>${L('支出', 'Expenses')}</span><span>${L('结余', 'Balance')}</span></div>`;
     for (let m = 12; m >= 1; m--) {
       const key = `${y}-${pad(m)}`, rs = yearRows.filter(r => ym(r.date) === key);
       if (!rs.length && key > ym(todayStr())) continue;
       const s = sums(rs);
-      html += `<div class="mrow ${key === ym(todayStr()) ? 'cur' : ''}" data-goto="${key}"><span class="m">${m} 月</span>
-        <span class="inc">${s.inc ? short(s.inc, c) : '–'}</span><span class="exp">${s.exp ? short(s.exp, c) : '–'}</span><span>${rs.length ? short(s.bal, c).replace(/^/, s.bal < 0 ? '-' : '') : '–'}</span></div>`;
+      html += `<div class="mrow ${key === ym(todayStr()) ? 'cur' : ''}" data-goto="${key}"><span class="m">${monthName(m)}</span>
+        <span class="inc">${s.inc ? short(s.inc, c) : '–'}</span><span class="exp">${s.exp ? short(s.exp, c) : '–'}</span><span>${rs.length ? (s.bal < 0 ? '-' : '') + short(s.bal, c) : '–'}</span></div>`;
     }
     body.innerHTML = html + '</div>';
     return;
   }
   $('#totals').innerHTML = totalsHtml(rows);
   if (state.tab === 'calendar' && !state.search) {
-    body.innerHTML = calendarHtml(rows) + (state.selDay ? dayListHtml(rows.filter(r => r.date === state.selDay)) || '<div class="empty">这天没有记录</div>' : '');
+    body.innerHTML = calendarHtml(rows) + (state.selDay ? dayListHtml(rows.filter(r => r.date === state.selDay)) || `<div class="empty">${L('这天没有记录', 'Nothing on this day')}</div>` : '');
     return;
   }
-  const chip = state.catFilter ? `<div class="search-row" style="padding-top:8px"><span class="badge" style="font-size:14px;padding:4px 10px">${esc(state.catFilter)}</span><button class="link" id="clearCat">显示全部</button></div>` : '';
-  body.innerHTML = chip + (dayListHtml(rows) || (state.search ? '<div class="empty">没有找到</div>' : EMPTY));
+  const chip = state.catFilter ? `<div class="search-row" style="padding-top:8px"><span class="badge" style="font-size:calc(14px * var(--fs));padding:4px 10px">${catEmoji(state.statsKind, state.catFilter)} ${esc(catLabel(state.statsKind, state.catFilter))}</span><button class="link" id="clearCat">${L('显示全部', 'Show all')}</button></div>` : '';
+  body.innerHTML = chip + (dayListHtml(rows) || (state.search ? `<div class="empty">${L('没有找到', 'Nothing found')}</div>` : emptyHtml()));
 }
 
 function calendarHtml(rows) {
@@ -203,7 +260,8 @@ function calendarHtml(rows) {
   const c = settings.mainCurrency;
   const byDay = {};
   for (const r of rows) (byDay[r.date] ||= []).push(r);
-  let html = '<div class="cal"><div class="cal-grid">' + ['一', '二', '三', '四', '五', '六', '日'].map(w => `<div class="wh">${w}</div>`).join('');
+  const heads = isEn() ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['一', '二', '三', '四', '五', '六', '日'];
+  let html = '<div class="cal"><div class="cal-grid">' + heads.map(w => `<div class="wh">${w}</div>`).join('');
   const d = new Date(start);
   for (let i = 0; i < 42; i++) {
     const ds = dstr(d), inMonth = d.getMonth() === m - 1;
@@ -224,15 +282,15 @@ function renderStats() {
   for (const r of rows) byCat[r.category] = (byCat[r.category] || 0) + toMain(r.amount, r.currency);
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const max = cats[0]?.[1] || 1;
-  const label = kind === 'income' ? '收入' : '支出';
+  const label = kind === 'income' ? L('收入', 'income') : L('支出', 'expenses');
 
-  let html = `<div class="panel"><h3>本月${label}</h3><div class="sub">按分类，折算成${cname(c)}${rateNote(rows)}</div>
-    <div class="hero ${kind === 'income' ? 'inc' : 'exp'}">${money(total, c)}</div><div class="sub">${rows.length} 笔</div>`;
-  html += cats.length ? cats.map(([name, v]) => `<div class="catrow" data-cat="${esc(name)}">
-      <span>${catInfo(kind, name).emoji}</span><span>${esc(name)}</span>
+  let html = `<div class="panel"><h3>${L('本月' + label, 'This month’s ' + label)}</h3><div class="sub">${L('按分类，折算成' + curName(c), 'By category, in ' + curName(c))}${rateNote(rows)}</div>
+    <div class="hero ${kind === 'income' ? 'inc' : 'exp'}">${money(total, c)}</div><div class="sub">${L(rows.length + ' 笔', rows.length + (rows.length === 1 ? ' record' : ' records'))}</div>`;
+  html += cats.length ? cats.map(([id, v]) => `<div class="catrow" data-cat="${esc(id)}">
+      <span>${catEmoji(kind, id)}</span><span class="cname">${esc(catLabel(kind, id))}</span>
       <span class="bar"><i style="width:${(v / max * 100).toFixed(1)}%"></i></span>
       <span class="val">${money(v, c)}<small>${(v / total * 100).toFixed(0)}%</small></span></div>`).join('')
-    : `<div class="empty" style="padding:16px">这个月没有${label}记录</div>`;
+    : `<div class="empty" style="padding:16px">${L('这个月没有' + label + '记录', 'No ' + label + ' this month')}</div>`;
   html += '</div>';
 
   // 近 6 个月趋势
@@ -241,10 +299,10 @@ function renderStats() {
   for (let i = 5; i >= 0; i--) { const d = new Date(y, m - 1 - i, 1); months.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); }
   const vals = months.map(k => records.filter(r => ym(r.date) === k && r.type === kind).reduce((s, r) => s + toMain(r.amount, r.currency), 0));
   const vmax = Math.max(...vals, 1);
-  html += `<div class="panel"><h3>近 6 个月${label}</h3><div class="sub">点柱子查看那个月</div><div class="trend">` +
-    months.map((k, i) => `<div class="col ${k === state.month ? 'cur' : ''}" data-goto-stats="${k}" data-tip="${+k.slice(5)} 月 ${money(vals[i], c)}">
+  html += `<div class="panel"><h3>${L('近 6 个月' + label, 'Last 6 months')}</h3><div class="sub">${L('点柱子查看那个月', 'Tap a bar to see that month')}</div><div class="trend">` +
+    months.map((k, i) => `<div class="col ${k === state.month ? 'cur' : ''}" data-goto-stats="${k}" data-tip="${monthName(+k.slice(5))} ${money(vals[i], c)}">
       ${k === state.month ? `<span class="lbl">${short(vals[i], c)}</span>` : ''}<i style="height:${(vals[i] / vmax * 100).toFixed(1)}%"></i></div>`).join('') +
-    `</div><div class="trend-x">${months.map(k => `<span>${+k.slice(5)}月</span>`).join('')}</div></div>`;
+    `</div><div class="trend-x">${months.map(k => `<span>${monthName(+k.slice(5))}</span>`).join('')}</div></div>`;
   $('#statsBody').innerHTML = html;
 }
 
@@ -256,59 +314,47 @@ function renderAccounts() {
     for (const cur of [...new Set(rows.map(r => r.currency))]) {
       const inc = rows.filter(r => r.currency === cur && r.type === 'income').reduce((s, r) => s + r.amount, 0);
       const exp = rows.filter(r => r.currency === cur && r.type === 'expense').reduce((s, r) => s + r.amount, 0);
-      if (inc) parts.push(`<span class="inc">收 ${money(inc, cur)}</span>`);
-      if (exp) parts.push(`<span class="exp">支 ${money(exp, cur)}</span>`);
+      if (inc) parts.push(`<span class="inc">${L('收', 'In')} ${money(inc, cur)}</span>`);
+      if (exp) parts.push(`<span class="exp">${L('支', 'Out')} ${money(exp, cur)}</span>`);
     }
     return parts.join('') || '<span>–</span>';
   };
-  let html = `<div class="panel"><h3>按账户</h3><div class="sub">${state.month.replace('-', ' 年 ')} 月 · 原币种显示</div>`;
+  const [y, m] = state.month.split('-').map(Number);
+  let html = `<div class="panel"><h3>${L('按账户', 'By account')}</h3><div class="sub">${monthYear(y, m)} · ${L('原币种显示', 'in original currencies')}</div>`;
   for (const a of accs) {
     const rows = records.filter(r => r.account === a && ym(r.date) === state.month);
     const all = records.filter(r => r.account === a);
     const s = sums(rows);
     html += `<div class="acc"><span class="name">${esc(a)}</span><span class="num exp">${money(s.exp, c)}</span>
-      <div class="line">本月 ${line(rows)}</div><div class="line">累计 ${line(all)}</div></div>`;
+      <div class="line">${L('本月', 'This month')} ${line(rows)}</div><div class="line">${L('累计', 'All time')} ${line(all)}</div></div>`;
   }
   const none = records.filter(r => !r.account && ym(r.date) === state.month);
-  if (none.length) html += `<div class="acc"><span class="name">未指定</span><span class="num exp">${money(sums(none).exp, c)}</span><div class="line">本月 ${line(none)}</div></div>`;
+  if (none.length) html += `<div class="acc"><span class="name">${L('未指定', 'Unassigned')}</span><span class="num exp">${money(sums(none).exp, c)}</span><div class="line">${L('本月', 'This month')} ${line(none)}</div></div>`;
   $('#accountsBody').innerHTML = html + '</div>';
 }
 
-function renderSettings() {
-  $('#setParser').value = settings.parser;
-  $('#aiSettings').hidden = settings.parser !== 'ai';
-  $('#setApiKey').value = settings.apiKey;
-  $('#setModel').value = settings.model;
-  $('#setConfirm').checked = settings.confirm;
-  const opts = enabled().map(c => `<option value="${c}">${sym(c).trim()} ${cname(c)}</option>`).join('');
-  $('#setMainCur').innerHTML = opts; $('#setMainCur').value = settings.mainCurrency;
-  $('#setDefaultCur').innerHTML = opts; $('#setDefaultCur').value = settings.defaultCurrency;
-  $('#curChips').innerHTML = CODES.map(c => `<label class="chip">
-    <input type="checkbox" value="${c}" ${settings.currencies.includes(c) ? 'checked' : ''}>${cname(c)} <small>${sym(c).trim()}</small></label>`).join('');
-  $('#rateList').innerHTML = enabled().filter(c => c !== settings.mainCurrency).map(c => `<label class="rate">
-    <span>1 ${cname(c)} =</span><input type="number" step="any" min="0" inputmode="decimal" data-rate="${c}" value="${fmtRate(perMain(c))}"><span>${cname(settings.mainCurrency)}</span></label>`).join('')
-    + `<p class="small">${settings.ratesUpdated ? '汇率更新于 ' + settings.ratesUpdated : '现在是大概的默认汇率，建议点“在线更新”。'}</p>`;
-  $('#setAccounts').value = settings.accounts.join(', ');
-  $('#setDefaultAcc').innerHTML = settings.accounts.map(a => `<option>${esc(a)}</option>`).join('');
-  $('#setDefaultAcc').value = settings.defaultAccount;
-  $('#setTheme').value = settings.theme;
-  $('#fsChips').innerHTML = FONT_SIZES.map(([v, n]) => `<label class="chip"><input type="radio" name="fs" value="${v}" ${+settings.fontSize === v ? 'checked' : ''}>${n}</label>`).join('');
-  $('#fwChips').innerHTML = Object.entries(FONT_WEIGHTS).map(([k, [n, w]]) => `<label class="chip" style="font-weight:${w}"><input type="radio" name="fw" value="${k}" ${settings.fontWeight === k ? 'checked' : ''}>${n}</label>`).join('');
-  $('#setFont').innerHTML = Object.entries(FONTS).map(([k, f]) => `<option value="${k}" style="font-family:${f.family.replace(/"/g, "'")}">${f.name}</option>`).join('');
-  $('#setFont').value = settings.font;
-  $('#dataInfo').textContent = `共 ${records.length} 条记录，已学会 ${Object.keys(memory).length} 个商家。数据只存在这台设备的浏览器里，请定期“备份 JSON”。`;
-}
-
-const FONT_SIZES = [[0.9, '小'], [1, '标准'], [1.12, '大'], [1.25, '特大'], [1.4, '超大']];
-const FONT_WEIGHTS = { normal: ['常规', 400, 600], medium: ['中等', 500, 700], bold: ['加粗', 600, 800] };
+/* ---------------- 外观 ---------------- */
+const FONT_SIZES = [[0.9, '小', 'S'], [1, '标准', 'M'], [1.12, '大', 'L'], [1.25, '特大', 'XL'], [1.4, '超大', 'XXL']];
+const FONT_WEIGHTS = { normal: ['常规', 'Regular', 400, 600], medium: ['中等', 'Medium', 500, 700], bold: ['加粗', 'Bold', 600, 800] };
 const SYS = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
 const FONTS = {
-  system:  { name: '系统默认', family: SYS },
-  sans:    { name: '思源黑体（清晰）', family: `"Noto Sans SC", ${SYS}`, google: 'Noto+Sans+SC:wght@400;500;600;700;800' },
-  serif:   { name: '思源宋体（书卷）', family: `"Noto Serif SC", "Songti SC", serif`, google: 'Noto+Serif+SC:wght@400;500;600;700;800' },
-  xiaowei: { name: '站酷小薇（文艺）', family: `"ZCOOL XiaoWei", "Noto Serif SC", serif`, google: 'ZCOOL+XiaoWei' },
-  kuaile:  { name: '站酷快乐体（活泼）', family: `"ZCOOL KuaiLe", ${SYS}`, google: 'ZCOOL+KuaiLe' },
-  kai:     { name: '楷体（手机自带时）', family: `"Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", serif` },
+  system:  { zh: '系统默认', en: 'System default', family: SYS },
+  sans:    { zh: '思源黑体（清晰）', en: 'Noto Sans SC (clear)', family: `"Noto Sans SC", ${SYS}`, google: 'Noto+Sans+SC:wght@400;500;600;700;800' },
+  serif:   { zh: '思源宋体（书卷）', en: 'Noto Serif SC (bookish)', family: `"Noto Serif SC", "Songti SC", serif`, google: 'Noto+Serif+SC:wght@400;500;600;700;800' },
+  xiaowei: { zh: '站酷小薇（文艺）', en: 'ZCOOL XiaoWei (artsy)', family: `"ZCOOL XiaoWei", "Noto Serif SC", serif`, google: 'ZCOOL+XiaoWei' },
+  kuaile:  { zh: '站酷快乐体（活泼）', en: 'ZCOOL KuaiLe (playful)', family: `"ZCOOL KuaiLe", ${SYS}`, google: 'ZCOOL+KuaiLe' },
+  kai:     { zh: '楷体（手机自带时）', en: 'Kaiti (if on device)', family: `"Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", serif` },
+};
+// 英文字体放在字体列表最前面：英文字母用它，中文字符它没有，自动落到中文字体
+const FONTS_EN = {
+  same:      { zh: '跟中文字体一样', en: 'Same as Chinese font' },
+  inter:     { zh: 'Inter（现代、清晰）', en: 'Inter (modern, clear)', family: '"Inter"', google: 'Inter:wght@400;500;600;700;800' },
+  roboto:    { zh: 'Roboto（安卓风格）', en: 'Roboto (Android style)', family: '"Roboto"', google: 'Roboto:wght@400;500;700;900' },
+  lato:      { zh: 'Lato（圆润友好）', en: 'Lato (friendly)', family: '"Lato"', google: 'Lato:wght@400;700;900' },
+  nunito:    { zh: 'Nunito（圆体、可爱）', en: 'Nunito (rounded)', family: '"Nunito"', google: 'Nunito:wght@400;500;600;700;800' },
+  merri:     { zh: 'Merriweather（衬线、易读）', en: 'Merriweather (serif)', family: '"Merriweather"', google: 'Merriweather:wght@400;700;900' },
+  playfair:  { zh: 'Playfair Display（优雅）', en: 'Playfair Display (elegant)', family: '"Playfair Display"', google: 'Playfair+Display:wght@400;500;600;700;800' },
+  mono:      { zh: 'JetBrains Mono（等宽，数字对齐）', en: 'JetBrains Mono (monospace)', family: '"JetBrains Mono"', google: 'JetBrains+Mono:wght@400;500;600;700;800' },
 };
 function loadGoogleFont(spec) {
   const id = 'gf-' + spec.split(':')[0];
@@ -320,14 +366,16 @@ function loadGoogleFont(spec) {
 }
 function applyAppearance() {
   const st = document.documentElement.style;
-  const [, fw, fwb] = FONT_WEIGHTS[settings.fontWeight] || FONT_WEIGHTS.medium;
-  const f = FONTS[settings.font] || FONTS.system;
+  const [, , fw, fwb] = FONT_WEIGHTS[settings.fontWeight] || FONT_WEIGHTS.medium;
+  const zh = FONTS[settings.font] || FONTS.system;
+  const en = FONTS_EN[settings.fontEn] || FONTS_EN.same;
   st.setProperty('--fs', settings.fontSize);
   document.documentElement.toggleAttribute('data-big', settings.fontSize >= 1.25); // 特大以上：列表只显示分类图标，给名字留空间
   st.setProperty('--fw', fw);
   st.setProperty('--fwb', fwb);
-  st.setProperty('--font-family', f.family);
-  if (f.google) loadGoogleFont(f.google);
+  st.setProperty('--font-family', en.family ? `${en.family}, ${zh.family}` : zh.family);
+  if (zh.google) loadGoogleFont(zh.google);
+  if (en.google) loadGoogleFont(en.google);
 }
 function applyTheme() {
   applyAppearance();
@@ -335,8 +383,109 @@ function applyTheme() {
   else document.documentElement.dataset.theme = settings.theme;
 }
 
+function renderSettings() {
+  $$('#langChips input').forEach(i => i.checked = i.value === settings.lang);
+  $('#setParser').value = settings.parser;
+  $('#aiSettings').hidden = settings.parser !== 'ai';
+  $('#setApiKey').value = settings.apiKey;
+  $('#setModel').value = settings.model;
+  $('#setConfirm').checked = settings.confirm;
+  const opts = enabled().map(c => `<option value="${c}">${sym(c).trim()} ${curName(c)}</option>`).join('');
+  $('#setMainCur').innerHTML = opts; $('#setMainCur').value = settings.mainCurrency;
+  $('#setDefaultCur').innerHTML = opts; $('#setDefaultCur').value = settings.defaultCurrency;
+  $('#curChips').innerHTML = CODES.map(c => `<label class="chip">
+    <input type="checkbox" value="${c}" ${settings.currencies.includes(c) ? 'checked' : ''}>${curName(c)} <small>${sym(c).trim()}</small></label>`).join('');
+  $('#rateList').innerHTML = enabled().filter(c => c !== settings.mainCurrency).map(c => `<label class="rate">
+    <span>1 ${curName(c)} =</span><input type="number" step="any" min="0" inputmode="decimal" data-rate="${c}" value="${fmtRate(perMain(c))}"><span>${curName(settings.mainCurrency)}</span></label>`).join('')
+    + `<p class="small">${settings.ratesUpdated ? L('汇率更新于 ', 'Rates updated ') + settings.ratesUpdated : L('现在是大概的默认汇率，建议点“在线更新”。', 'These are rough default rates — tap “Update online”.')}</p>`;
+  $('#setAccounts').value = settings.accounts.join(', ');
+  $('#setDefaultAcc').innerHTML = settings.accounts.map(a => `<option>${esc(a)}</option>`).join('');
+  $('#setDefaultAcc').value = settings.defaultAccount;
+  $('#setTheme').value = settings.theme;
+  $('#fsChips').innerHTML = FONT_SIZES.map(([v, zh, en]) => `<label class="chip"><input type="radio" name="fs" value="${v}" ${+settings.fontSize === v ? 'checked' : ''}>${L(zh, en)}</label>`).join('');
+  $('#fwChips').innerHTML = Object.entries(FONT_WEIGHTS).map(([k, [zh, en, w]]) => `<label class="chip" style="font-weight:${w}"><input type="radio" name="fw" value="${k}" ${settings.fontWeight === k ? 'checked' : ''}>${L(zh, en)}</label>`).join('');
+  $('#setFont').innerHTML = Object.entries(FONTS).map(([k, f]) => `<option value="${k}">${L(f.zh, f.en)}</option>`).join('');
+  $('#setFont').value = settings.font;
+  $('#setFontEn').innerHTML = Object.entries(FONTS_EN).map(([k, f]) => `<option value="${k}">${L(f.zh, f.en)}</option>`).join('');
+  $('#setFontEn').value = settings.fontEn;
+  $('#dataInfo').textContent = L(
+    `共 ${records.length} 条记录，已学会 ${Object.keys(memory).length} 个商家。数据只存在这台设备的浏览器里，请定期“备份 JSON”。`,
+    `${records.length} records, ${Object.keys(memory).length} learned stores. Data lives only in this device’s browser — back up regularly.`);
+}
+
+/* ---------------- 编辑分类 ---------------- */
+const catDialog = $('#catDialog');
+function renderCatEditor() {
+  const kind = state.catKind, list = catsOf(kind);
+  $$('#catTabs button').forEach(b => b.classList.toggle('on', b.dataset.kind === kind));
+  const count = id => records.filter(r => r.type === kind && r.category === id).length;
+  $('#catList').innerHTML = list.map((c, i) => `<div class="catedit" data-i="${i}">
+    <input class="emoji" data-f="emoji" value="${esc(c.emoji)}" maxlength="4" aria-label="${L('图标', 'Icon')}">
+    <input data-f="zh" value="${esc(c.zh)}" placeholder="中文名">
+    <input data-f="en" value="${esc(c.en)}" placeholder="English">
+    <input class="kw" data-f="kw" value="${esc(c.kw)}" placeholder="${L('关键词，如 猫粮, pet', 'Keywords, e.g. pet, vet')}">
+    <div class="cat-btns">
+      <button type="button" data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="${L('上移', 'Move up')}">↑</button>
+      <button type="button" data-act="down" ${i === list.length - 1 ? 'disabled' : ''} aria-label="${L('下移', 'Move down')}">↓</button>
+      <button type="button" data-act="del" class="del" aria-label="${L('删除', 'Delete')}">✕</button>
+    </div>
+    <span class="cnt">${L(`${count(c.id)} 条记录`, `${count(c.id)} records`)}${BUILTIN[c.id] ? L(' · 内置识别规则', ' · built-in rules') : ''}</span>
+  </div>`).join('');
+}
+function openCatEditor(kind = 'expense') { state.catKind = kind; renderCatEditor(); catDialog.showModal(); }
+$('#btnCats').onclick = () => openCatEditor('expense');
+$('#btnCatsDone').onclick = () => catDialog.close();
+catDialog.addEventListener('close', render);
+catDialog.addEventListener('click', e => { if (e.target === catDialog) catDialog.close(); });
+$('#catTabs').addEventListener('click', e => { const b = e.target.closest('[data-kind]'); if (b) { state.catKind = b.dataset.kind; renderCatEditor(); } });
+$('#catList').addEventListener('change', e => {
+  const row = e.target.closest('.catedit'), f = e.target.dataset.f;
+  if (!row || !f) return;
+  const c = catsOf(state.catKind)[+row.dataset.i];
+  c[f] = e.target.value.trim();
+  if (f === 'emoji' && !c.emoji) c.emoji = '🏷️';
+  if ((f === 'zh' || f === 'en') && !c.zh && !c.en) { c[f] = c.id; e.target.value = c.id; }
+  saveSettings();
+});
+$('#catList').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'), row = e.target.closest('.catedit');
+  if (!b || !row) return;
+  const list = catsOf(state.catKind), i = +row.dataset.i, c = list[i];
+  if (b.dataset.act === 'up' && i > 0) [list[i - 1], list[i]] = [list[i], list[i - 1]];
+  if (b.dataset.act === 'down' && i < list.length - 1) [list[i + 1], list[i]] = [list[i], list[i + 1]];
+  if (b.dataset.act === 'del') {
+    if (list.length <= 1) { toast(L('至少要保留一个分类', 'Keep at least one category')); return; }
+    const rest = list.filter(x => x !== c);
+    const target = (rest.find(x => x.id === '其他' || x.id === '其他收入') || rest[rest.length - 1]);
+    const n = records.filter(r => r.type === state.catKind && r.category === c.id).length;
+    const name = L(c.zh || c.en, c.en || c.zh), tname = L(target.zh || target.en, target.en || target.zh);
+    if (!confirm(n ? L(`删除“${name}”？它的 ${n} 条记录会移到“${tname}”。`, `Delete “${name}”? Its ${n} records will move to “${tname}”.`) : L(`删除“${name}”？`, `Delete “${name}”?`))) return;
+    for (const r of records) if (r.type === state.catKind && r.category === c.id) r.category = target.id;
+    for (const m of Object.values(memory)) if (m.category === c.id) m.category = target.id;
+    list.splice(i, 1);
+    saveRecords(); saveMemory();
+  }
+  saveSettings(); renderCatEditor();
+});
+$('#btnCatAdd').onclick = () => {
+  const list = catsOf(state.catKind);
+  const fb = list.findIndex(c => c.id === '其他' || c.id === '其他收入');
+  const c = { id: 'c_' + Date.now().toString(36), zh: '', en: '', emoji: '🏷️', kw: '' };
+  list.splice(fb >= 0 ? fb : list.length, 0, c); // 放在“其他”前面
+  saveSettings(); renderCatEditor();
+  const rows = $$('#catList .catedit');
+  const row = rows[fb >= 0 ? fb : rows.length - 1];
+  row?.scrollIntoView({ block: 'center' });
+  row?.querySelector(isEn() ? '[data-f=en]' : '[data-f=zh]')?.focus();
+};
+
 /* ---------------- 识别并保存 ---------------- */
-const parseOpts = () => ({ defaultCurrency: settings.defaultCurrency, accounts: settings.accounts, defaultAccount: settings.defaultAccount, memory });
+const parseOpts = () => ({
+  defaultCurrency: settings.defaultCurrency, accounts: settings.accounts, defaultAccount: settings.defaultAccount, memory,
+  categories: { expense: matcherList('expense'), income: matcherList('income') },
+  fallback: { expense: fallbackCat('expense'), income: fallbackCat('income') },
+});
+const aiCats = type => catsOf(type).map(c => ({ id: c.id, label: [c.zh, c.en].filter(Boolean).join(' / '), kw: kwList(c.kw) }));
 
 async function recognize(text) {
   if (settings.parser === 'ai' && settings.apiKey && navigator.onLine) {
@@ -346,13 +495,13 @@ async function recognize(text) {
       const recs = await aiParse(text, {
         apiKey: settings.apiKey, model: settings.model, today: todayStr(),
         defaultCurrency: settings.defaultCurrency, currencies: enabled(), defaultAccount: settings.defaultAccount, accounts: settings.accounts,
-        expenseCats: allCats('expense'), incomeCats: allCats('income'), knownStores,
+        expenseCats: aiCats('expense'), incomeCats: aiCats('income'), knownStores,
       });
       if (recs.length) return recs;
-      toast('AI 没找到金额，改用本地规则');
+      toast(L('AI 没找到金额，改用本地规则', 'AI found no amount — using built-in rules'));
     } catch (e) {
       console.warn(e);
-      toast('AI 出错（' + (e.status || e.message || e) + '），改用本地规则');
+      toast(L('AI 出错（', 'AI error (') + (e.status || e.message || e) + L('），改用本地规则', ') — using built-in rules'));
     }
   }
   return parseMany(text, parseOpts());
@@ -365,14 +514,14 @@ async function submitText(text) {
   send.classList.add('busy'); send.disabled = true;
   try {
     const recs = await recognize(text);
-    if (!recs.length) { toast('没看懂这句话，试试“商家 物品 金额”'); return; }
+    if (!recs.length) { toast(L('没看懂这句话，试试“商家 物品 金额”', 'Didn’t get that — try “store item amount”')); return; }
     $('#composeInput').value = ''; autosize();
     const ready = recs.every(r => r.amount > 0);
     if (!settings.confirm && ready) {
       const added = recs.map(addRecord);
       saveRecords(); render();
-      toast(added.length > 1 ? `已记 ${added.length} 笔` : `已记 ${added[0].store || added[0].item} ${money(added[0].amount, added[0].currency)}`, {
-        label: '撤销', fn: () => { const ids = new Set(added.map(a => a.id)); records = records.filter(r => !ids.has(r.id)); saveRecords(); render(); },
+      toast(added.length > 1 ? L(`已记 ${added.length} 笔`, `Saved ${added.length} records`) : L('已记 ', 'Saved ') + `${added[0].store || added[0].item} ${money(added[0].amount, added[0].currency)}`, {
+        label: undoLabel(), fn: () => { const ids = new Set(added.map(a => a.id)); records = records.filter(r => !ids.has(r.id)); saveRecords(); render(); },
       });
     } else openSheet(recs);
   } finally { send.classList.remove('busy'); send.disabled = false; }
@@ -384,10 +533,11 @@ function learn(r) {
   saveMemory();
 }
 function addRecord(r) {
+  const type = r.type || 'expense';
   const rec = {
-    id: uid(), createdAt: Date.now(), type: r.type || 'expense', date: r.date || todayStr(),
+    id: uid(), createdAt: Date.now(), type, date: r.date || todayStr(),
     store: (r.store || '').trim(), item: (r.item || '').trim(), amount: r2(+r.amount), currency: r.currency,
-    category: r.category || guessCategory(r.type, r.store, r.item), account: r.account || '', note: r.note || '',
+    category: findCat(type, r.category) ? r.category : guess(type, r.store, r.item), account: r.account || '', note: r.note || '',
   };
   records.push(rec); learn(rec);
   if (rec.date.slice(0, 7) !== state.month && !state.search) state.month = rec.date.slice(0, 7);
@@ -401,36 +551,41 @@ const sheet = $('#sheet');
 function curPicker(cur) {
   const list = [...new Set([...enabled(), cur])];
   if (list.length <= 3) return `<div class="seg cur">${list.map(c => `<button type="button" data-v="${c}" class="${c === cur ? 'on' : ''}">${sym(c).trim()}</button>`).join('')}</div>`;
-  return `<select class="cur-select" aria-label="币种">${list.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${sym(c).trim()} ${cname(c)}</option>`).join('')}</select>`;
+  return `<select class="cur-select" aria-label="${L('币种', 'Currency')}">${list.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${sym(c).trim()} ${curName(c)}</option>`).join('')}</select>`;
 }
+const catOptions = (type, sel) => {
+  const list = catsOf(type).slice();
+  if (sel && !list.some(c => c.id === sel)) list.push({ id: sel, zh: sel, en: sel, emoji: '🏷️' });
+  return list.map(c => `<option value="${esc(c.id)}" ${c.id === sel ? 'selected' : ''}>${c.emoji} ${esc(L(c.zh || c.en, c.en || c.zh))}</option>`).join('')
+    + `<option value="__edit">✏️ ${L('编辑分类…', 'Edit categories…')}</option>`;
+};
 function cardHtml(r, i, multi) {
   const type = r.type || 'expense';
-  const cats = allCats(type);
-  if (r.category && !cats.includes(r.category)) cats.push(r.category);
   const accs = [...new Set([...settings.accounts, r.account].filter(Boolean))];
   return `<div class="ecard" data-i="${i}" data-type="${type}" data-cur="${r.currency || settings.defaultCurrency}">
-    ${multi ? '<button type="button" class="x" aria-label="去掉这条">×</button>' : ''}
-    ${r.note && !sheetEditId ? `<div class="src">“${esc(r.note)}”${r.ai ? '<span class="badge">AI</span>' : r.learned ? '<span class="badge">已学会的商家</span>' : ''}</div>` : ''}
+    ${multi ? `<button type="button" class="x" aria-label="${L('去掉这条', 'Remove')}">×</button>` : ''}
+    ${r.note && !sheetEditId ? `<div class="src">“${esc(r.note)}”${r.ai ? '<span class="badge">AI</span>' : r.learned ? `<span class="badge">${L('已学会的商家', 'Learned store')}</span>` : ''}</div>` : ''}
     <div class="g">
       <div class="full amount-row">
-        <div class="seg type"><button type="button" data-v="expense" class="${type === 'expense' ? 'on' : ''}">支出</button><button type="button" data-v="income" class="${type === 'income' ? 'on' : ''}">收入</button></div>
-        <input name="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="金额" value="${r.amount ?? ''}" required>
+        <div class="seg type"><button type="button" data-v="expense" class="${type === 'expense' ? 'on' : ''}">${L('支出', 'Out')}</button><button type="button" data-v="income" class="${type === 'income' ? 'on' : ''}">${L('收入', 'In')}</button></div>
+        <input name="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="${L('金额', 'Amount')}" value="${r.amount ?? ''}" required>
         ${curPicker(r.currency || settings.defaultCurrency)}
       </div>
-      <label>商家<input name="store" list="storeList" value="${esc(r.store)}" placeholder="Woolworth Westgate"></label>
-      <label>物品 / 说明<input name="item" value="${esc(r.item)}" placeholder="买菜"></label>
-      <label>分类<select name="category">${cats.map(c => `<option ${c === r.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
-      <label>账户<select name="account"><option value="">（不指定）</option>${accs.map(a => `<option ${a === r.account ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
-      <label class="full">日期<input name="date" type="date" value="${r.date || todayStr()}" required></label>
+      <label>${L('商家', 'Store')}<input name="store" list="storeList" value="${esc(r.store)}" placeholder="Woolworth Westgate"></label>
+      <label>${L('物品 / 说明', 'Item / note')}<input name="item" value="${esc(r.item)}" placeholder="${L('买菜', 'groceries')}"></label>
+      <label>${L('分类', 'Category')}<select name="category">${catOptions(type, r.category)}</select></label>
+      <label>${L('账户', 'Account')}<select name="account"><option value="">${L('（不指定）', '(none)')}</option>${accs.map(a => `<option ${a === r.account ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
+      <label class="full">${L('日期', 'Date')}<input name="date" type="date" value="${r.date || todayStr()}" required></label>
     </div></div>`;
 }
 
 let sheetRecs = [];
+function saveLabel(n) { return sheetEditId ? L('保存修改', 'Save changes') : n > 1 ? L(`全部保存（${n}）`, `Save all (${n})`) : L('保存', 'Save'); }
 function openSheet(recs, editId = null) {
   sheetEditId = editId;
   sheetRecs = recs;
-  $('#sheetTitle').textContent = editId ? '修改记录' : recs.length > 1 ? `识别出 ${recs.length} 笔` : '确认记录';
-  $('#btnSave').textContent = editId ? '保存修改' : recs.length > 1 ? `全部保存（${recs.length}）` : '保存';
+  $('#sheetTitle').textContent = editId ? L('修改记录', 'Edit record') : recs.length > 1 ? L(`识别出 ${recs.length} 笔`, `Found ${recs.length} records`) : L('确认记录', 'Confirm record');
+  $('#btnSave').textContent = saveLabel(recs.length);
   $('#btnDelete').hidden = !editId;
   $('#sheetCards').innerHTML = recs.map((r, i) => cardHtml(r, i, recs.length > 1)).join('');
   sheet.showModal();
@@ -444,7 +599,7 @@ $('#sheetCards').addEventListener('click', e => {
   if (e.target.classList.contains('x')) {
     card.remove();
     const n = $$('#sheetCards .ecard').length;
-    if (!n) sheet.close(); else $('#btnSave').textContent = n > 1 ? `全部保存（${n}）` : '保存';
+    if (!n) sheet.close(); else $('#btnSave').textContent = saveLabel(n);
     return;
   }
   const b = e.target.closest('.seg button');
@@ -455,20 +610,30 @@ $('#sheetCards').addEventListener('click', e => {
     card.dataset.type = b.dataset.v;
     const f = n => card.querySelector(`[name=${n}]`).value;
     const sel = card.querySelector('[name=category]');
-    sel.innerHTML = allCats(b.dataset.v).map(c => `<option>${esc(c)}</option>`).join('');
-    sel.value = guessCategory(b.dataset.v, f('store'), f('item'));
+    sel.innerHTML = catOptions(b.dataset.v, guess(b.dataset.v, f('store'), f('item')));
   }
 });
-// 改商家时，若这个商家学过，自动带出分类/账户
 $('#sheetCards').addEventListener('change', e => {
-  if (e.target.classList.contains('cur-select')) { e.target.closest('.ecard').dataset.cur = e.target.value; return; }
+  const card = e.target.closest('.ecard');
+  if (e.target.classList.contains('cur-select')) { card.dataset.cur = e.target.value; return; }
+  // 在分类下拉里选“编辑分类…”：打开分类编辑，关掉后刷新这张卡片的选项
+  if (e.target.name === 'category' && e.target.value === '__edit') {
+    const sel = e.target, prev = sel.dataset.prev || guess(card.dataset.type, '', '');
+    sel.value = prev;
+    openCatEditor(card.dataset.type);
+    catDialog.addEventListener('close', () => { sel.innerHTML = catOptions(card.dataset.type, findCat(card.dataset.type, prev) ? prev : fallbackCat(card.dataset.type)); }, { once: true });
+    return;
+  }
+  if (e.target.name === 'category') { e.target.dataset.prev = e.target.value; return; }
+  // 改商家时，若这个商家学过，自动带出分类/账户
   if (e.target.name !== 'store') return;
-  const card = e.target.closest('.ecard'), m = memory[memoryKey(e.target.value)];
+  const m = memory[memoryKey(e.target.value)];
   if (m && (m.type || 'expense') === card.dataset.type) {
     card.querySelector('[name=category]').value = m.category;
     if (m.account) card.querySelector('[name=account]').value = m.account;
   }
 });
+$('#sheetCards').addEventListener('focusin', e => { if (e.target.name === 'category') e.target.dataset.prev = e.target.value; });
 
 $('#sheetForm').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
@@ -478,7 +643,7 @@ $('#sheetForm').addEventListener('submit', e => {
   for (const card of cards) {
     const f = n => card.querySelector(`[name=${n}]`).value;
     const amount = parseFloat(f('amount'));
-    if (!(amount > 0)) { card.querySelector('[name=amount]').focus(); toast('请填写金额'); return; }
+    if (!(amount > 0)) { card.querySelector('[name=amount]').focus(); toast(L('请填写金额', 'Please enter an amount')); return; }
     out.push({ type: card.dataset.type, amount, currency: card.dataset.cur, store: f('store'), item: f('item'),
       category: f('category'), account: f('account'), date: f('date'), note: sheetRecs[+card.dataset.i]?.note || '' });
   }
@@ -486,10 +651,10 @@ $('#sheetForm').addEventListener('submit', e => {
     const rec = records.find(r => r.id === sheetEditId);
     Object.assign(rec, out[0], { amount: r2(out[0].amount), store: out[0].store.trim(), item: out[0].item.trim() });
     learn(rec);
-    toast('已更新');
+    toast(L('已更新', 'Updated'));
   } else {
     const added = out.map(addRecord);
-    toast(added.length > 1 ? `已记 ${added.length} 笔` : `已记 ${money(added[0].amount, added[0].currency)}`);
+    toast(added.length > 1 ? L(`已记 ${added.length} 笔`, `Saved ${added.length} records`) : L('已记 ', 'Saved ') + money(added[0].amount, added[0].currency));
   }
   saveRecords(); sheet.close(); render();
 });
@@ -498,7 +663,7 @@ $('#btnDelete').onclick = () => {
   if (!rec) return;
   records = records.filter(r => r.id !== sheetEditId);
   saveRecords(); sheet.close(); render();
-  toast('已删除', { label: '撤销', fn: () => { records.push(rec); saveRecords(); render(); } });
+  toast(L('已删除', 'Deleted'), { label: undoLabel(), fn: () => { records.push(rec); saveRecords(); render(); } });
 };
 sheet.addEventListener('click', e => { if (e.target === sheet) sheet.close(); });
 
@@ -552,26 +717,31 @@ $('#composeForm').addEventListener('submit', e => { e.preventDefault(); submitTe
 // 语音
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const mic = $('#btnMic'), live = $('#live');
-let rec = null, listening = false;
+let rec = null, listening = false, liveHint = '';
 mic.onclick = () => {
-  if (!SR) { toast('这个浏览器不支持语音，请用键盘上的🎤听写'); input.focus(); return; }
+  if (!SR) { toast(L('这个浏览器不支持语音，请用键盘上的🎤听写', 'Voice isn’t supported here — use the keyboard 🎤 dictation')); input.focus(); return; }
   if (listening) { rec.stop(); return; }
   rec = new SR();
-  rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false;
+  rec.lang = isEn() ? 'en-NZ' : 'zh-CN'; rec.interimResults = true; rec.continuous = false;
   let finalText = '';
-  rec.onstart = () => { listening = true; mic.classList.add('listening'); live.hidden = false; live.textContent = '正在听…（中英文都可以）'; };
+  liveHint = L('正在听…（中英文都可以）', 'Listening…');
+  rec.onstart = () => { listening = true; mic.classList.add('listening'); live.hidden = false; live.textContent = liveHint; };
   rec.onresult = e => {
     let interim = ''; finalText = '';
     for (const res of e.results) res.isFinal ? finalText += res[0].transcript : interim += res[0].transcript;
     live.textContent = finalText + interim;
   };
-  rec.onerror = e => toast({ 'not-allowed': '没有麦克风权限', 'no-speech': '没听到声音', network: '语音识别需要联网' }[e.error] || '语音出错：' + e.error);
+  rec.onerror = e => toast({
+    'not-allowed': L('没有麦克风权限', 'Microphone permission denied'),
+    'no-speech': L('没听到声音', 'Didn’t hear anything'),
+    network: L('语音识别需要联网', 'Voice recognition needs internet'),
+  }[e.error] || L('语音出错：', 'Voice error: ') + e.error);
   rec.onend = () => {
     listening = false; mic.classList.remove('listening'); live.hidden = true;
-    const text = finalText || (live.textContent.startsWith('正在听') ? '' : live.textContent);
+    const text = finalText || (live.textContent === liveHint ? '' : live.textContent);
     if (text) { input.value = text; autosize(); submitText(text); }
   };
-  try { rec.start(); } catch (err) { toast('无法启动语音：' + err.message); }
+  try { rec.start(); } catch (err) { toast(L('无法启动语音：', 'Could not start voice: ') + err.message); }
 };
 
 /* ---------------- 设置 ---------------- */
@@ -579,6 +749,7 @@ const bindSetting = (sel, key, fn = v => v, after) => $(sel).addEventListener('c
   settings[key] = fn(e.target.type === 'checkbox' ? e.target.checked : e.target.value);
   saveSettings(); after?.(); render();
 });
+$('#langChips').addEventListener('change', e => { settings.lang = e.target.value; saveSettings(); applyStaticText(); render(); });
 bindSetting('#setParser', 'parser');
 bindSetting('#setApiKey', 'apiKey', v => v.trim());
 bindSetting('#setModel', 'model');
@@ -606,6 +777,7 @@ bindSetting('#setAccounts', 'accounts', v => [...new Set(v.split(/[,，、]/).ma
 bindSetting('#setDefaultAcc', 'defaultAccount');
 bindSetting('#setTheme', 'theme', v => v, applyTheme);
 bindSetting('#setFont', 'font', v => v, applyAppearance);
+bindSetting('#setFontEn', 'fontEn', v => v, applyAppearance);
 $('#fsChips').addEventListener('change', e => { settings.fontSize = +e.target.value; saveSettings(); applyAppearance(); render(); });
 $('#fwChips').addEventListener('change', e => { settings.fontWeight = e.target.value; saveSettings(); applyAppearance(); render(); });
 
@@ -613,11 +785,11 @@ $('#btnRate').onclick = async () => {
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/NZD');
     const data = await res.json();
-    if (!data?.rates?.CNY) throw new Error('没有数据');
+    if (!data?.rates?.CNY) throw new Error(L('没有数据', 'no data'));
     for (const c of CODES) if (data.rates[c]) settings.rates[c] = data.rates[c];
     settings.ratesUpdated = todayStr(); saveSettings(); render();
-    toast('汇率已更新');
-  } catch (e) { toast('更新汇率失败：' + e.message); }
+    toast(L('汇率已更新', 'Rates updated'));
+  } catch (e) { toast(L('更新汇率失败：', 'Could not update rates: ') + e.message); }
 };
 
 function download(name, text, type) {
@@ -626,25 +798,31 @@ function download(name, text, type) {
   a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 $('#btnCsv').onclick = () => {
-  const head = ['日期', '收支', '分类', '商家', '物品', '金额', '币种', `折算${settings.mainCurrency}`, '账户', '原话'];
+  const head = isEn()
+    ? ['Date', 'Type', 'Category', 'Store', 'Item', 'Amount', 'Currency', `In ${settings.mainCurrency}`, 'Account', 'Original text']
+    : ['日期', '收支', '分类', '商家', '物品', '金额', '币种', `折算${settings.mainCurrency}`, '账户', '原话'];
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = [...records].sort((a, b) => a.date.localeCompare(b.date)).map(r =>
-    [r.date, r.type === 'income' ? '收入' : '支出', r.category, r.store, r.item, r.amount, r.currency, r2(toMain(r.amount, r.currency)), r.account, r.note].map(q).join(','));
-  download(`记账-${todayStr()}.csv`, '﻿' + [head.join(','), ...lines].join('\r\n'), 'text/csv;charset=utf-8');
+    [r.date, r.type === 'income' ? L('收入', 'Income') : L('支出', 'Expense'), catLabel(r.type, r.category), r.store, r.item, r.amount, r.currency, r2(toMain(r.amount, r.currency)), r.account, r.note].map(q).join(','));
+  download(`${L('记账', 'ledger')}-${todayStr()}.csv`, '﻿' + [head.join(','), ...lines].join('\r\n'), 'text/csv;charset=utf-8');
 };
-$('#btnBackup').onclick = () => download(`记账备份-${todayStr()}.json`, JSON.stringify({ version: 2, records, memory, settings: { ...settings, apiKey: '' } }, null, 2), 'application/json');
+$('#btnBackup').onclick = () => download(`${L('记账备份', 'ledger-backup')}-${todayStr()}.json`, JSON.stringify({ version: 3, records, memory, settings: { ...settings, apiKey: '' } }, null, 2), 'application/json');
 $('#fileRestore').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const data = JSON.parse(await f.text());
     const incoming = Array.isArray(data) ? data : data.records;
-    if (!Array.isArray(incoming)) throw new Error('格式不对');
+    if (!Array.isArray(incoming)) throw new Error(L('格式不对', 'wrong format'));
     const ids = new Set(records.map(r => r.id));
     const added = incoming.filter(r => r && r.id && !ids.has(r.id) && r.amount > 0).map(r => ({ type: 'expense', account: '', ...r }));
     records.push(...added);
     if (data.memory) { memory = { ...data.memory, ...memory }; saveMemory(); }
-    saveRecords(); render(); toast(`已恢复 ${added.length} 条记录`);
-  } catch (err) { toast('恢复失败：' + err.message); }
+    // 备份里的自定义分类：本机没有的补上
+    for (const type of ['expense', 'income']) for (const c of data.settings?.cats?.[type] || [])
+      if (!catsOf(type).some(x => x.id === c.id)) catsOf(type).push(c);
+    adoptUnknownCats();
+    saveRecords(); saveSettings(); render(); toast(L(`已恢复 ${added.length} 条记录`, `Restored ${added.length} records`));
+  } catch (err) { toast(L('恢复失败：', 'Restore failed: ') + err.message); }
   e.target.value = '';
 };
 $('#fileImport').onchange = async e => {
@@ -659,19 +837,23 @@ $('#fileImport').onchange = async e => {
       if (r.store && !memory[memoryKey(r.store)]) learn(r);
       if (r.account && !settings.accounts.includes(r.account)) settings.accounts.push(r.account);
     }
+    adoptUnknownCats();
     saveRecords(); saveSettings(); render();
-    toast(`导入 ${fresh.length} 条${rows.length - fresh.length ? `，跳过重复 ${rows.length - fresh.length} 条` : ''}${skipped ? `，忽略转账等 ${skipped} 条` : ''}`);
-  } catch (err) { console.error(err); toast('导入失败：' + err.message); }
+    const dup = rows.length - fresh.length;
+    toast(L(`导入 ${fresh.length} 条${dup ? `，跳过重复 ${dup} 条` : ''}${skipped ? `，忽略转账等 ${skipped} 条` : ''}`,
+      `Imported ${fresh.length}${dup ? `, skipped ${dup} duplicates` : ''}${skipped ? `, ignored ${skipped} transfers etc.` : ''}`));
+  } catch (err) { console.error(err); toast(L('导入失败：', 'Import failed: ') + err.message); }
   e.target.value = '';
 };
-$('#btnForget').onclick = () => { if (confirm('清除所有已学会的商家？（记录不会删除）')) { memory = {}; saveMemory(); render(); } };
+$('#btnForget').onclick = () => { if (confirm(L('清除所有已学会的商家？（记录不会删除）', 'Forget all learned stores? (Records are kept.)'))) { memory = {}; saveMemory(); render(); } };
 $('#btnClear').onclick = () => {
-  if (records.length && confirm(`确定清空全部 ${records.length} 条记录？建议先备份。`)) { records = []; saveRecords(); render(); toast('已清空'); }
+  if (records.length && confirm(L(`确定清空全部 ${records.length} 条记录？建议先备份。`, `Delete all ${records.length} records? Back up first!`))) { records = []; saveRecords(); render(); toast(L('已清空', 'All deleted')); }
 };
 
 /* ---------------- 启动 ---------------- */
 // 旧版本数据：把已有商家学进来
 if (!Object.keys(memory).length) records.forEach(r => r.store && learn(r));
 applyTheme();
+applyStaticText();
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
