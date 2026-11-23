@@ -1,3 +1,5 @@
+import { CODES, CURRENCY_TAIL_SRC, CURRENCY_PREFIX_SRC, codeOf, findCurrencyIn, dollarFor } from './currencies.js';
+
 // 语音/文字记账解析器：从一句中文（可夹英文）里提取 商店、物品、金额、币种、分类、日期
 // 纯本地规则，不需要联网或 API Key。
 
@@ -29,12 +31,7 @@ export function cnToNumber(s) {
   return total;
 }
 
-const NZD_WORDS = ['新西兰元', '新西兰币', '纽西兰元', '纽币', '纽元', '纽刀', 'NZD', 'nzd', 'NZ$', '刀', '澳纽币'];
-const CNY_WORDS = ['人民币', 'RMB', 'rmb', 'CNY', 'cny', '¥', '￥', '块钱', '块', '元', '毛', '角'];
-const NZD_RE = /新西兰元|新西兰币|纽西兰元|纽币|纽元|纽刀|NZD|NZ\$|刀/i;
-const CNY_RE = /人民币|RMB|CNY|[¥￥]|块钱|块|元|毛|角/i;
-
-const CURRENCY_TAIL = '(?:新西兰元|新西兰币|纽西兰元|纽币|纽元|纽刀|NZD|NZ\\$|刀|人民币|RMB|CNY|块钱|块|元|dollars?|bucks?)';
+const CODE_PREFIX = `(?:${CURRENCY_PREFIX_SRC}|\\b(?:${CODES.join('|')})\\b)`;
 const CN_NUM = '[零〇一二两三四五六七八九十百千万点]+';
 const SMALL = '(?:([零一二两三四五六七八九\\d])(?:毛|角)?)?(?:([一二两三四五六七八九\\d])分)?';
 
@@ -42,7 +39,7 @@ const SPEND_BEFORE = /(花了?|用了?|一共|总共|共计|共|付了?|刷了?|
 
 export const EXPENSE_CATS = [
   { name: '买菜', emoji: '🛒', re: /超市|买菜|蔬菜|水果|肉|鸡蛋|牛奶|面包|大米|食材|菜市场|海鲜|grocer|groceries|supermarket|countdown|woolworth|new ?world|pak ?n ?save|fresh ?choice|four ?square|farmers? market|veg|fruit|milk|bread/i },
-  { name: '餐饮', emoji: '🍜', re: /饭|餐|吃|喝|咖啡|奶茶|外卖|早餐|午餐|晚餐|夜宵|火锅|烧烤|面馆|餐厅|麦当劳|肯德基|汉堡|披萨|寿司|茶|酒吧|啤酒|food|lunch|dinner|breakfast|brunch|coffee|cafe|restaurant|takeaway|kfc|mcdonald|subway|burger|pizza|sushi|bubble tea|drink|beer|bar\b|food ?court|uber ?eats|doordash/i },
+  { name: '餐饮', emoji: '🍜', re: /饭|餐|三明治|炸鸡|便利店|小吃|夜市|sandwich|吃|喝|咖啡|奶茶|外卖|早餐|午餐|晚餐|夜宵|火锅|烧烤|面馆|餐厅|麦当劳|肯德基|汉堡|披萨|寿司|茶|酒吧|啤酒|food|lunch|dinner|breakfast|brunch|coffee|cafe|restaurant|takeaway|kfc|mcdonald|subway|burger|pizza|sushi|bubble tea|drink|beer|bar\b|food ?court|uber ?eats|doordash/i },
   { name: '交通', emoji: '🚗', re: /打车|出租|滴滴|地铁|公交|巴士|火车|机票|航班|加油|汽油|油费|停车|过路费|车票|修车|保养|uber(?! ?eats)|taxi|bus\b|train|ferry|flight|petrol|gas|fuel|parking|z ?energy|\bbp\b|mobil|gull|caltex|wof|rego|at ?hop|toll/i },
   { name: '住房', emoji: '🏠', re: /房租|租金|水费|电费|燃气|网费|宽带|物业|贷款|房贷|rent|mortgage|power|electricity|water rates|internet|broadband|mercury|genesis|contact energy|rates/i },
   { name: '通讯', emoji: '📱', re: /话费|手机费|流量|充值|spark|one ?nz|2degrees|skinny|phone bill|mobile plan/i },
@@ -54,7 +51,7 @@ export const EXPENSE_CATS = [
   { name: '日用', emoji: '🧴', re: /日用|纸巾|洗发|牙膏|洗衣|清洁|家居|宜家|household|warehouse|kmart|mitre ?10|bunnings|briscoes|ikea|farmers|cleaning|tissue|shampoo/i },
   { name: '服饰', emoji: '👔', re: /衣服|裤子|鞋|帽子|外套|裙|袜|包包|服装|t恤|衬衫|内衣|apparel|cloth|shirt|jacket|coat|shoe|sneaker|jeans|pants|dress|socks|uniqlo|zara|h&m|tommy|hilfiger|skechers|nike|adidas|under ?armou?r|cotton on|glassons|kathmandu/i },
   { name: '数码', emoji: '💻', re: /手机|电脑|耳机|充电|数据线|硬盘|内存卡|sd卡|苹果|三星|大疆|laptop|computer|iphone|ipad|headphone|charger|cable|ssd|hard drive|sd card|noel ?leeming|jb ?hi-?fi|pb ?tech|apple|samsung|dji/i },
-  { name: '美容', emoji: '💇', re: /理发|剪头|美容|美甲|化妆|护肤|haircut|barber|salon|beauty|cosmetic|skincare|mecca|sephora/i },
+  { name: '美容', emoji: '💇', re: /按摩|spa|massage|理发|剪头|美容|美甲|化妆|护肤|haircut|barber|salon|beauty|cosmetic|skincare|mecca|sephora/i },
   { name: '人情', emoji: '🎁', re: /红包|礼物|礼金|请客|送礼|份子|捐|gift|present|donation|treat/i },
   { name: '其他', emoji: '🏷️', re: /$^/ },
 ];
@@ -130,23 +127,23 @@ function parseDate(text, now) {
 function digitVal(s) { return /\d/.test(s) ? +s : CN_DIGIT[s]; }
 
 // 找出所有金额候选并打分，返回最佳候选
-function findAmount(text) {
+function findAmount(text, dollarDefault) {
   const re = new RegExp(
-    `(?:NZ\\$|\\$|[¥￥])?\\s*(\\d+(?:\\.\\d+)?|${CN_NUM})\\s*(${CURRENCY_TAIL})?${SMALL}`, 'gi');
+    `(${CODE_PREFIX})?\\s*(\\d+(?:[.,]\\d+)?|${CN_NUM})\\s*(${CURRENCY_TAIL_SRC})?${SMALL}`, 'gi');
   const cands = [];
   let m;
   while ((m = re.exec(text))) {
     if (!m[0].trim()) { re.lastIndex++; continue; }
-    const raw = m[1];
+    const raw = m[2].replace(',', '.');
     const isArabic = /\d/.test(raw);
     let value = isArabic ? parseFloat(raw) : cnToNumber(raw);
     if (!isFinite(value) || value <= 0) continue;
-    const prefix = m[0].trimStart().match(/^(NZ\$|\$|[¥￥])/i)?.[1];
-    const tail = m[2];
-    if (tail && (m[3] || m[4])) {
+    const prefix = m[1];
+    const tail = m[3];
+    if (tail && (m[4] || m[5])) {
       // "十二块五" / "12块5毛" / "3块2毛5分"
-      if (m[3]) value += digitVal(m[3]) / 10;
-      if (m[4]) value += digitVal(m[4]) / 100;
+      if (m[4]) value += digitVal(m[4]) / 10;
+      if (m[5]) value += digitVal(m[5]) / 100;
     }
     const before = text.slice(0, m.index);
     const after = text.slice(m.index + m[0].length);
@@ -155,11 +152,7 @@ function findAmount(text) {
     if (SPEND_BEFORE.test(before)) score += 2;
     if (/^\s*(号|日|月|点钟|点半|个|件|斤|公斤|瓶|杯|份|盒|包|袋|只|条|双|张|次|天|年|岁|人|位|楼|号线|路|%)/.test(after) && !tail) score -= 5;
     if (!isArabic && score <= 0) continue; // 中文数字必须有货币词或"花了"等提示，避免把"一件"当金额
-    let currency = null;
-    const cur = (tail || prefix || '');
-    if (/^\$$/.test(cur) || /dollar|buck/i.test(cur)) currency = 'NZD';
-    else if (NZD_RE.test(cur)) currency = 'NZD';
-    else if (CNY_RE.test(cur)) currency = 'CNY';
+    const currency = codeOf(tail, dollarDefault) || codeOf(prefix, dollarDefault);
     cands.push({ value: Math.round(value * 100) / 100, currency, score, start: m.index, end: m.index + m[0].length });
   }
   if (!cands.length) return null;
@@ -194,7 +187,7 @@ function locate(text, key) {
 }
 
 // 英文/无动词句子：把“物品关键词”及其后的词当物品，前面的当商家
-const ITEM_WORDS = /^(groceries|grocery|food|lunch|dinner|breakfast|brunch|coffee|coffees|drinks?|snacks?|petrol|fuel|gas|parking|shirts?|jacket|coat|shoes?|sneakers|jeans|pants|dress|socks|movie|ticket|tickets|book|books|haircut|gift|medicine|rent|power|internet|phone|taxi|uber|bus|train|clothes|top|hoodie|cap|bag|lens|camera|strings|guitar|sd|card|cable|charger|meat|veg|vegetables|fruit|milk|bread|eggs|beer|wine|pizza|burger|sushi|noodles|ramen|tea|cake)$/i;
+const ITEM_WORDS = /^(groceries|grocery|food|lunch|dinner|breakfast|brunch|coffee|coffees|drinks?|snacks?|petrol|fuel|gas|parking|shirts?|jacket|coat|shoes?|sneakers|jeans|pants|dress|socks|movie|ticket|tickets|book|books|haircut|gift|medicine|rent|power|internet|phone|taxi|uber|bus|train|clothes|top|hoodie|cap|bag|lens|camera|strings|guitar|sd|card|cable|charger|meat|veg|vegetables|fruit|milk|bread|eggs|beer|wine|pizza|burger|sushi|noodles|ramen|tea|cake|sandwich|sandwiches|snack|massage|souvenirs?|tickets?)$/i;
 
 function splitStoreItem(rest) {
   // "lunch at Albany mall" / "coffee @ Starbucks"
@@ -208,6 +201,7 @@ function splitStoreItem(rest) {
   }
   const idx = words.findIndex((w, i) => i > 0 && ITEM_WORDS.test(w.replace(/[^a-z]/gi, '')));
   if (idx > 0) return { store: words.slice(0, idx).join(' '), item: words.slice(idx).join(' ') };
+  if (words.length === 1 && ITEM_WORDS.test(words[0])) return { item: words[0], store: '' };
   if (words.length && ITEM_WORDS.test(words[0]) && words.length > 1) return { item: words[0], store: words.slice(1).join(' ') };
   return { store: rest, item: '' };
 }
@@ -230,18 +224,16 @@ export function parseExpense(input, opts = {}) {
   const acc = detectAccount(text, accounts);
   if (acc) text = text.replace(new RegExp(`(用|刷|by|with|paid by|pay by|via)?\\s*${acc.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(支付|付款|付的|付)?`, 'i'), ' ');
 
-  const amt = findAmount(text);
-  let currency = amt?.currency;
-  if (!currency) {
-    if (NZD_RE.test(text)) currency = 'NZD';
-    else if (/人民币|RMB|CNY|块|元/i.test(text)) currency = 'CNY';
-  }
+  const dollarDefault = dollarFor(defaultCurrency);
+  const amt = findAmount(text, dollarDefault);
+  let currency = amt?.currency || findCurrencyIn(text, dollarDefault);
 
   let rest = amt ? text.slice(0, amt.start) + ' ' + text.slice(amt.end) : text;
   rest = rest
     .replace(/(花了?|用了?|总共|共计|共|付了?|刷了?|合计|价值|是)\s*$/, '')
-    .replace(/\b(spent|paid|cost|for|total|nzd|rmb|cny|dollars?|bucks?)\b/gi, ' ')
-    .replace(/收到|收入|进账|入账|到账|received|got paid/gi, ' ');
+    .replace(new RegExp(`\\b(spent|paid|cost|for|total|dollars?|bucks?|${CODES.join('|')})\\b`, 'gi'), ' ')
+    .replace(/收到|收入|进账|入账|到账|received|got paid/gi, ' ')
+    .replace(/[$£€¥￥₩฿]/g, ' ');
 
   let store = '', item = '';
   const learned = matchMemory(rest, memory);
@@ -275,6 +267,8 @@ export function parseExpense(input, opts = {}) {
     const sp = splitStoreItem(r);
     store = sp.store; item = sp.item;
     // 纯中文短语（"房租" "工资"）当物品而不是商家
+    const cnWords = store.split(' ');
+    if (!item && cnWords.length >= 2 && CN.test(store) && !/[a-z]/i.test(store)) { item = cnWords.pop(); store = cnWords.join(' '); }
     if (!item && CN.test(store) && !/[a-z]/i.test(store) && !/(超市|商店|店|餐厅|饭店|酒楼|商场|市场|药房|药店|面馆|诊所|医院|影院|mall)$/i.test(store)) { item = store; store = ''; }
   }
 

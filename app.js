@@ -1,11 +1,11 @@
 import { parseMany, EXPENSE_CATS, INCOME_CATS, guessCategory, memoryKey } from './parser.js';
+import { CURRENCIES, CODES, sym, dec, cname, defaultRates } from './currencies.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const KEY = 'voice-ledger.records.v1';
 const SKEY = 'voice-ledger.settings.v1';
 const MKEY = 'voice-ledger.memory.v1';
-const SYM = { CNY: '¥', NZD: 'NZ$' };
 const WD = ['日', '一', '二', '三', '四', '五', '六'];
 
 /* ---------------- 存储 ---------------- */
@@ -15,10 +15,14 @@ const store = {
 };
 let settings = {
   parser: 'local', apiKey: '', model: 'claude-opus-5-5', confirm: true,
-  mainCurrency: 'CNY', defaultCurrency: 'NZD', rate: 4.1,
+  mainCurrency: 'CNY', defaultCurrency: 'NZD', currencies: ['NZD', 'CNY'],
   accounts: ['卡', '现金', '微信', '支付宝'], defaultAccount: '卡', theme: 'auto',
   ...store.get(SKEY, {}),
 };
+// 汇率：rates[X] = 1 纽币能换多少 X。旧版只有 settings.rate（1 NZD = ? CNY）
+settings.rates = { ...defaultRates(), ...(settings.rate ? { CNY: settings.rate } : {}), ...(settings.rates || {}) };
+settings.rate = undefined;
+const enabled = () => settings.currencies.filter(c => CURRENCIES[c]);
 // 旧版记录没有 type/account，补上
 let records = store.get(KEY, []).map(r => ({ type: 'expense', account: '', ...r }));
 let memory = store.get(MKEY, {});
@@ -35,20 +39,20 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const uid = () => crypto.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2);
 const r2 = n => Math.round(n * 100) / 100;
 function money(n, cur, { sign = false } = {}) {
-  const s = Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${sign && n < 0 ? '-' : ''}${SYM[cur] || ''}${s}`;
+  const d = dec(cur);
+  const s = Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return `${sign && n < 0 ? '-' : ''}${sym(cur)}${s}`;
 }
 function short(n, cur) {
   const a = Math.abs(n);
   const s = a >= 10000 ? (a / 10000).toFixed(1) + '万' : a >= 1000 ? (a / 1000).toFixed(1) + 'k' : a.toFixed(a < 100 ? 1 : 0);
-  return (SYM[cur] || '') + s.replace(/\.0(?=[k万]?$)/, '');
+  return sym(cur) + s.replace(/\.0(?=[k万]?$)/, '');
 }
 function toMain(amount, cur) {
-  const main = settings.mainCurrency, rate = +settings.rate || 1;
+  const main = settings.mainCurrency;
   if (cur === main) return amount;
-  if (cur === 'NZD' && main === 'CNY') return amount * rate;
-  if (cur === 'CNY' && main === 'NZD') return amount / rate;
-  return amount;
+  const from = +settings.rates[cur], to = +settings.rates[main];
+  return from && to ? amount / from * to : amount;
 }
 const catInfo = (type, name) => (type === 'income' ? INCOME_CATS : EXPENSE_CATS).find(c => c.name === name)
   || EXPENSE_CATS.concat(INCOME_CATS).find(c => c.name === name) || { name, emoji: '🏷️' };
@@ -57,6 +61,13 @@ const allCats = type => {
   const extra = records.filter(r => r.type === type).map(r => r.category).filter(c => c && !base.includes(c));
   return [...base, ...new Set(extra)];
 };
+// 1 单位 cur 值多少主货币
+const perMain = cur => (+settings.rates[settings.mainCurrency]) / (+settings.rates[cur]);
+const fmtRate = v => v >= 100 ? v.toFixed(2) : v >= 1 ? v.toFixed(4).replace(/0+$/, '').replace(/\.$/, '') : v.toPrecision(4);
+function rateNote(rows) {
+  const used = [...new Set(rows.map(r => r.currency))].filter(c => c !== settings.mainCurrency);
+  return used.length ? '（' + used.map(c => `1 ${c} = ${fmtRate(perMain(c))} ${settings.mainCurrency}`).join('，') + '）' : '';
+}
 function sums(rows) {
   let inc = 0, exp = 0;
   for (const r of rows) { const v = toMain(r.amount, r.currency); r.type === 'income' ? inc += v : exp += v; }
@@ -214,7 +225,7 @@ function renderStats() {
   const max = cats[0]?.[1] || 1;
   const label = kind === 'income' ? '收入' : '支出';
 
-  let html = `<div class="panel"><h3>本月${label}</h3><div class="sub">按分类，折算成${c === 'CNY' ? '人民币' : '纽币'}（1 NZD = ${settings.rate} CNY）</div>
+  let html = `<div class="panel"><h3>本月${label}</h3><div class="sub">按分类，折算成${cname(c)}${rateNote(rows)}</div>
     <div class="hero ${kind === 'income' ? 'inc' : 'exp'}">${money(total, c)}</div><div class="sub">${rows.length} 笔</div>`;
   html += cats.length ? cats.map(([name, v]) => `<div class="catrow" data-cat="${esc(name)}">
       <span>${catInfo(kind, name).emoji}</span><span>${esc(name)}</span>
@@ -241,7 +252,7 @@ function renderAccounts() {
   const c = settings.mainCurrency;
   const line = (rows) => {
     const parts = [];
-    for (const cur of ['NZD', 'CNY']) {
+    for (const cur of [...new Set(rows.map(r => r.currency))]) {
       const inc = rows.filter(r => r.currency === cur && r.type === 'income').reduce((s, r) => s + r.amount, 0);
       const exp = rows.filter(r => r.currency === cur && r.type === 'expense').reduce((s, r) => s + r.amount, 0);
       if (inc) parts.push(`<span class="inc">收 ${money(inc, cur)}</span>`);
@@ -268,9 +279,14 @@ function renderSettings() {
   $('#setApiKey').value = settings.apiKey;
   $('#setModel').value = settings.model;
   $('#setConfirm').checked = settings.confirm;
-  $('#setMainCur').value = settings.mainCurrency;
-  $('#setDefaultCur').value = settings.defaultCurrency;
-  $('#setRate').value = settings.rate;
+  const opts = enabled().map(c => `<option value="${c}">${sym(c).trim()} ${cname(c)}</option>`).join('');
+  $('#setMainCur').innerHTML = opts; $('#setMainCur').value = settings.mainCurrency;
+  $('#setDefaultCur').innerHTML = opts; $('#setDefaultCur').value = settings.defaultCurrency;
+  $('#curChips').innerHTML = CODES.map(c => `<label class="chip">
+    <input type="checkbox" value="${c}" ${settings.currencies.includes(c) ? 'checked' : ''}>${cname(c)} <small>${sym(c).trim()}</small></label>`).join('');
+  $('#rateList').innerHTML = enabled().filter(c => c !== settings.mainCurrency).map(c => `<label class="rate">
+    <span>1 ${cname(c)} =</span><input type="number" step="any" min="0" inputmode="decimal" data-rate="${c}" value="${fmtRate(perMain(c))}"><span>${cname(settings.mainCurrency)}</span></label>`).join('')
+    + `<p class="small">${settings.ratesUpdated ? '汇率更新于 ' + settings.ratesUpdated : '现在是大概的默认汇率，建议点“在线更新”。'}</p>`;
   $('#setAccounts').value = settings.accounts.join(', ');
   $('#setDefaultAcc').innerHTML = settings.accounts.map(a => `<option>${esc(a)}</option>`).join('');
   $('#setDefaultAcc').value = settings.defaultAccount;
@@ -293,7 +309,7 @@ async function recognize(text) {
       const knownStores = Object.values(memory).slice(-60).map(v => `${v.name}→${v.category}`);
       const recs = await aiParse(text, {
         apiKey: settings.apiKey, model: settings.model, today: todayStr(),
-        defaultCurrency: settings.defaultCurrency, defaultAccount: settings.defaultAccount, accounts: settings.accounts,
+        defaultCurrency: settings.defaultCurrency, currencies: enabled(), defaultAccount: settings.defaultAccount, accounts: settings.accounts,
         expenseCats: allCats('expense'), incomeCats: allCats('income'), knownStores,
       });
       if (recs.length) return recs;
@@ -346,6 +362,11 @@ function addRecord(r) {
 let sheetEditId = null;
 const sheet = $('#sheet');
 
+function curPicker(cur) {
+  const list = [...new Set([...enabled(), cur])];
+  if (list.length <= 3) return `<div class="seg cur">${list.map(c => `<button type="button" data-v="${c}" class="${c === cur ? 'on' : ''}">${sym(c).trim()}</button>`).join('')}</div>`;
+  return `<select class="cur-select" aria-label="币种">${list.map(c => `<option value="${c}" ${c === cur ? 'selected' : ''}>${sym(c).trim()} ${cname(c)}</option>`).join('')}</select>`;
+}
 function cardHtml(r, i, multi) {
   const type = r.type || 'expense';
   const cats = allCats(type);
@@ -358,7 +379,7 @@ function cardHtml(r, i, multi) {
       <div class="full amount-row">
         <div class="seg type"><button type="button" data-v="expense" class="${type === 'expense' ? 'on' : ''}">支出</button><button type="button" data-v="income" class="${type === 'income' ? 'on' : ''}">收入</button></div>
         <input name="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="金额" value="${r.amount ?? ''}" required>
-        <div class="seg cur"><button type="button" data-v="NZD" class="${r.currency === 'NZD' ? 'on' : ''}">NZ$</button><button type="button" data-v="CNY" class="${r.currency === 'CNY' ? 'on' : ''}">¥</button></div>
+        ${curPicker(r.currency || settings.defaultCurrency)}
       </div>
       <label>商家<input name="store" list="storeList" value="${esc(r.store)}" placeholder="Woolworth Westgate"></label>
       <label>物品 / 说明<input name="item" value="${esc(r.item)}" placeholder="买菜"></label>
@@ -404,6 +425,7 @@ $('#sheetCards').addEventListener('click', e => {
 });
 // 改商家时，若这个商家学过，自动带出分类/账户
 $('#sheetCards').addEventListener('change', e => {
+  if (e.target.classList.contains('cur-select')) { e.target.closest('.ecard').dataset.cur = e.target.value; return; }
   if (e.target.name !== 'store') return;
   const card = e.target.closest('.ecard'), m = memory[memoryKey(e.target.value)];
   if (m && (m.type || 'expense') === card.dataset.type) {
@@ -527,7 +549,20 @@ bindSetting('#setModel', 'model');
 bindSetting('#setConfirm', 'confirm');
 bindSetting('#setMainCur', 'mainCurrency');
 bindSetting('#setDefaultCur', 'defaultCurrency');
-bindSetting('#setRate', 'rate', v => parseFloat(v) || settings.rate);
+$('#curChips').addEventListener('change', e => {
+  const picked = $$('#curChips input:checked').map(x => x.value);
+  if (!picked.length) { e.target.checked = true; return; }
+  settings.currencies = CODES.filter(c => picked.includes(c));
+  if (!settings.currencies.includes(settings.mainCurrency)) settings.mainCurrency = settings.currencies[0];
+  if (!settings.currencies.includes(settings.defaultCurrency)) settings.defaultCurrency = settings.currencies[0];
+  saveSettings(); render();
+});
+$('#rateList').addEventListener('change', e => {
+  const c = e.target.dataset.rate, v = parseFloat(e.target.value);
+  if (!c || !(v > 0)) return;
+  settings.rates[c] = settings.rates[settings.mainCurrency] / v;
+  saveSettings(); render();
+});
 bindSetting('#setAccounts', 'accounts', v => [...new Set(v.split(/[,，、]/).map(s => s.trim()).filter(Boolean))], () => {
   if (!settings.accounts.includes(settings.defaultAccount)) settings.defaultAccount = settings.accounts[0] || '';
   saveSettings();
@@ -539,10 +574,10 @@ $('#btnRate').onclick = async () => {
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/NZD');
     const data = await res.json();
-    const rate = data?.rates?.CNY;
-    if (!rate) throw new Error('没有数据');
-    settings.rate = Math.round(rate * 10000) / 10000; saveSettings(); render();
-    toast(`已更新：1 NZD = ${settings.rate} CNY`);
+    if (!data?.rates?.CNY) throw new Error('没有数据');
+    for (const c of CODES) if (data.rates[c]) settings.rates[c] = data.rates[c];
+    settings.ratesUpdated = todayStr(); saveSettings(); render();
+    toast('汇率已更新');
   } catch (e) { toast('更新汇率失败：' + e.message); }
 };
 

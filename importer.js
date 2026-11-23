@@ -1,5 +1,6 @@
 // 导入其他记账 App 导出的 Excel / CSV（例如 Money Manager 的 “导出到 Excel”）。
 // 自动识别表头：日期、账户、分类、备注/商家、描述、金额、币种、收支。
+import { codeOf, CODES } from './currencies.js';
 const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 
 const CAT_MAP = {
@@ -14,10 +15,9 @@ const CAT_MAP = {
 };
 
 const CUR = s => {
-  const t = String(s || '').trim().toUpperCase();
-  if (/^(CNY|RMB|¥|￥|CN¥|人民币)$/.test(t)) return 'CNY';
-  if (/^(NZD|NZ\$|\$|纽币)$/.test(t)) return 'NZD';
-  return null;
+  const t = String(s || '').trim();
+  if (CODES.includes(t.toUpperCase())) return t.toUpperCase();
+  return codeOf(t);
 };
 
 function pick(headers, ...tests) {

@@ -1,5 +1,5 @@
-const CACHE = 'voice-ledger-v2';
-const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'parser.js', 'ai.js', 'importer.js', 'manifest.webmanifest',
+const CACHE = 'voice-ledger-v3';
+const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'parser.js', 'currencies.js', 'ai.js', 'importer.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

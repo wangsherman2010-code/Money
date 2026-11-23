@@ -83,15 +83,18 @@
       </label>
 
       <h2>货币与账户</h2>
+      <div class="row">我用的货币（勾选的会出现在记账面板里）
+        <div class="chips" id="curChips"></div>
+      </div>
       <label class="row">统计用的主货币
-        <select id="setMainCur"><option value="CNY">¥ 人民币</option><option value="NZD">NZ$ 纽币</option></select>
+        <select id="setMainCur"></select>
       </label>
       <label class="row">没说币种时默认
-        <select id="setDefaultCur"><option value="NZD">NZ$ 纽币</option><option value="CNY">¥ 人民币</option></select>
+        <select id="setDefaultCur"></select>
       </label>
-      <label class="row">汇率：1 纽币 = ? 人民币
-        <span class="inline"><input id="setRate" type="number" step="0.0001" min="0" inputmode="decimal"><button class="btn" id="btnRate">在线更新</button></span>
-      </label>
+      <div class="row"><span class="inline" style="justify-content:space-between;align-items:center">汇率<button class="btn" id="btnRate">在线更新</button></span>
+        <div id="rateList"></div>
+      </div>
       <label class="row">账户（用逗号分开）
         <input id="setAccounts" placeholder="卡, 现金, 微信, 支付宝">
       </label>

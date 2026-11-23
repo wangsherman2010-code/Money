@@ -1,6 +1,6 @@
 # 一句话记账 PWA
 
-一个可以装在手机主屏幕上的记账 App。**打一句话（或说一句话）就记一笔**，自动识别商家、物品、金额、币种（人民币 / 纽币）、分类、账户和日期。
+一个可以装在手机主屏幕上的记账 App。**打一句话（或说一句话）就记一笔**，自动识别商家、物品、金额、币种（人民币、纽币、英镑、美元等 15 种）、分类、账户和日期。
 
 ```
 Woolworth Westgate 买菜 41               → 买菜 · Woolworth Westgate · NZ$41 · 卡
@@ -8,6 +8,8 @@ Tommy Hilfiger Westgate jacket 344 card  → 服饰 · Tommy Hilfiger Westgate �
 昨天在麦当劳吃午饭 35 块 微信              → 餐饮 · 麦当劳 · 午饭 · ¥35 · 微信 · 昨天
 收到培训费 3000 纽币                      → 收入 · 培训收入 · NZ$3000
 Albany mall food court lunch 25.5 cash   → 餐饮 · Albany mall · NZ$25.5 · 现金
+在伦敦 Tesco 买了三明治 4.5 英镑          → 餐饮 · 伦敦 Tesco · 三明治 · £4.5
+Uber 23 USD                              → 交通 · Uber · US$23
 ```
 一次可以输入多行，每行一笔。
 
@@ -20,7 +22,7 @@ Albany mall food court lunch 25.5 cash   → 餐饮 · Albany mall · NZ$25.5 ·
 | 🔍 搜索 | 按商家、物品、分类、金额搜索全部记录 |
 | 🧠 越用越聪明 | 记住每个商家的分类、账户和币种，下次只写“Woolworth Westgate 41”就够了 |
 | 🤖 AI 识别（可选） | 填入 Anthropic API Key，用 Claude 理解更复杂的句子，比如“给 Ingrid 在 Under Amore 买内衣 106，又在 Skechers 买鞋 120”会拆成两笔 |
-| 💱 双币种 | 每笔保留原币种，统计时按汇率折算，汇率可一键在线更新 |
+| 💱 多币种 | 人民币、纽币、美元、英镑、欧元、澳元、日元、港币、加元、新加坡元、新台币、韩元、泰铢、马币、瑞士法郎。在设置里勾选常用的；每笔保留原币种，统计时按汇率折算成主货币，汇率可一键在线更新 |
 | 📥 导入 | 可直接导入 Money Manager 等 App 导出的 Excel（.xls/.xlsx/.csv） |
 | 📤 导出 | CSV（Excel 能打开）、JSON 备份与恢复 |
 | 📴 离线 | 本地识别完全离线；数据只保存在你的手机里 |
@@ -46,6 +48,7 @@ Albany mall food court lunch 25.5 cash   → 餐饮 · Albany mall · NZ$25.5 ·
 | `index.html` / `style.css` | 页面和样式（自动深色模式） |
 | `app.js` | 界面、保存、统计、导入导出 |
 | `parser.js` | 本地识别规则（中文数字、币种、商家、分类、账户、日期、学习过的商家） |
+| `currencies.js` | 货币表：符号、中文名、各种说法、默认汇率 |
 | `ai.js` | 可选的 Claude 识别 |
 | `importer.js` | Excel / CSV 导入 |
 | `sw.js` / `manifest.webmanifest` | 离线和安装 |
