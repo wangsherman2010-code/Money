@@ -1,48 +1,53 @@
-# 语音记账 PWA
+# 一句话记账 PWA
 
-说一句话，自动记一笔账。支持 **人民币 (¥)** 和 **纽币 (NZ$)**。
+一个可以装在手机主屏幕上的记账 App。**打一句话（或说一句话）就记一笔**，自动识别商家、物品、金额、币种（人民币 / 纽币）、分类、账户和日期。
 
-例子：
-- “在 Countdown 买了牛奶和面包，花了 12.5 纽币”
-- “昨天在麦当劳吃了午饭三十五块五”
-- “11月20号在宜家买了一个台灯一百二十九人民币”
-- “加油 90 刀”
-
-App 会自动认出 **日期、商店、物品、金额、币种、分类**，填进表单。你看一眼，没问题就按“保存”。
+```
+Woolworth Westgate 买菜 41               → 买菜 · Woolworth Westgate · NZ$41 · 卡
+Tommy Hilfiger Westgate jacket 344 card  → 服饰 · Tommy Hilfiger Westgate · jacket · NZ$344
+昨天在麦当劳吃午饭 35 块 微信              → 餐饮 · 麦当劳 · 午饭 · ¥35 · 微信 · 昨天
+收到培训费 3000 纽币                      → 收入 · 培训收入 · NZ$3000
+Albany mall food court lunch 25.5 cash   → 餐饮 · Albany mall · NZ$25.5 · 现金
+```
+一次可以输入多行，每行一笔。
 
 ## 功能
-- 🎤 语音输入（中文），也可以打字，或用手机键盘上的听写
-- 💱 币种识别：纽币 / 纽元 / 新西兰元 / NZD / 刀 → NZ$；人民币 / 块 / 元 / RMB → ¥；没说币种就用默认币种（在设置里改）
-- 🔢 中文数字：“两百”“三十五块五”“一千二”“12块5”都能识别
-- 🗂 自动分类（买菜、餐饮、交通、住房、数码……），认识 Countdown、New World、Pak'nSave 等新西兰商店
-- 📊 按月统计，纽币和人民币分开合计，并按你设的汇率折算总额
-- ✏️ 点任何一条记录可以修改，也可以删除
-- 📤 导出 CSV（可用 Excel / Numbers 打开），JSON 备份与恢复
-- 📴 离线可用，数据只存在你自己的手机里
+| | |
+|---|---|
+| 📒 明细 | 每日 / 日历 / 月度三种看法；收入、支出、结余按主货币折算 |
+| 📊 统计 | 按分类的支出/收入占比，近 6 个月趋势；点分类看明细 |
+| 💳 账户 | 卡、现金、微信、支付宝……每个账户本月和累计的收支 |
+| 🔍 搜索 | 按商家、物品、分类、金额搜索全部记录 |
+| 🧠 越用越聪明 | 记住每个商家的分类、账户和币种，下次只写“Woolworth Westgate 41”就够了 |
+| 🤖 AI 识别（可选） | 填入 Anthropic API Key，用 Claude 理解更复杂的句子，比如“给 Ingrid 在 Under Amore 买内衣 106，又在 Skechers 买鞋 120”会拆成两笔 |
+| 💱 双币种 | 每笔保留原币种，统计时按汇率折算，汇率可一键在线更新 |
+| 📥 导入 | 可直接导入 Money Manager 等 App 导出的 Excel（.xls/.xlsx/.csv） |
+| 📤 导出 | CSV（Excel 能打开）、JSON 备份与恢复 |
+| 📴 离线 | 本地识别完全离线；数据只保存在你的手机里 |
+
+## 两种识别方式
+- **本地规则**（默认）：免费、离线、即时。适合“商家 物品 金额”这种写法，中英文都行。
+- **AI（Claude）**：在“设置 → 识别方式”切换，填入你自己的 [Anthropic API Key](https://console.anthropic.com/)。
+  - 默认 Claude Opus 5.5，记一笔大约花不到 0.01 美元；也可以选更便宜的 Sonnet 5.5 或 Haiku 5.5。
+  - Key 只存在手机本地，请求从手机直接发给 Anthropic。
+  - 没网或出错时自动退回本地规则。
+
+## 从 Money App 搬家
+在 Money App 里：更多 → 备份 → **导出到 Excel**，把文件传到手机，然后在本 App 的“设置 → 导入 Money 的 Excel”选择它。转账记录会被跳过，重复的记录不会重复导入，英文分类会自动对应到中文分类（Food→餐饮、Groceries→买菜、Apparel→服饰……）。
+
+## 发布到手机（GitHub Pages，免费）
+1. 把分支合并到 `main`
+2. 仓库 Settings → Pages → Source 选 “Deploy from a branch”，分支 `main`，目录 `/ (root)`
+3. 打开 `https://<你的用户名>.github.io/Money/`，在浏览器菜单里“添加到主屏幕”
 
 ## 文件
 | 文件 | 作用 |
 |---|---|
-| `index.html` | 页面 |
-| `style.css` | 样式（自动深色模式） |
-| `app.js` | 语音识别、保存、列表、导出 |
-| `parser.js` | 把一句话拆成 商店/物品/金额/币种（纯本地规则，不需要 API Key） |
-| `sw.js` / `manifest.webmanifest` | PWA 离线与安装 |
+| `index.html` / `style.css` | 页面和样式（自动深色模式） |
+| `app.js` | 界面、保存、统计、导入导出 |
+| `parser.js` | 本地识别规则（中文数字、币种、商家、分类、账户、日期、学习过的商家） |
+| `ai.js` | 可选的 Claude 识别 |
+| `importer.js` | Excel / CSV 导入 |
+| `sw.js` / `manifest.webmanifest` | 离线和安装 |
 
-## 发布到手机（GitHub Pages，免费）
-麦克风只在 **HTTPS** 网址下可用，最简单是用 GitHub Pages：
-1. 把这些文件合并到 `main` 分支
-2. GitHub 仓库 → Settings → Pages → Source 选 “Deploy from a branch”，分支选 `main`，目录 `/ (root)`
-3. 一两分钟后打开 `https://<你的用户名>.github.io/Money/`
-4. 手机上“添加到主屏幕”，就像一个 App
-
-## 关于语音识别
-- **Android Chrome、电脑 Chrome / Edge**：话筒按钮直接可用。
-- **iPhone Safari**：一般可用；但如果从主屏幕图标打开后话筒没反应（iOS 对主屏幕 App 的限制），就点输入框，用 **键盘上的 🎤 听写**，再按“识别”，效果一样。
-- 浏览器的语音识别需要联网；记账本身离线可用。
-
-## 本地测试
-```bash
-python3 -m http.server 8000
-# 打开 http://localhost:8000
-```
+本地测试：`python3 -m http.server 8000`，打开 http://localhost:8000

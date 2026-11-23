@@ -1,7 +1,7 @@
 {
-  "name": "语音记账",
+  "name": "一句话记账",
   "short_name": "记账",
-  "description": "说一句话就记一笔账，支持人民币和纽币",
+  "description": "一句话（打字或语音）自动记一笔账，支持人民币和纽币",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

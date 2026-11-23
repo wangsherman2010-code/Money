@@ -2,95 +2,158 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>语音记账</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>一句话记账</title>
 <meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="语音记账">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="记账">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="top">
-  <h1>语音记账</h1>
-  <button id="btnSettings" class="icon-btn" aria-label="设置">⚙︎</button>
-</header>
-
-<main>
-  <section class="summary" id="summary"></section>
-
-  <section class="capture">
-    <button id="btnMic" class="mic" aria-label="按一下开始说话">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+<div class="app">
+  <header class="top">
+    <div class="month-nav" id="monthNav">
+      <button class="icon-btn" data-month="-1" aria-label="上个月">‹</button>
+      <button class="month-label" id="monthLabel"></button>
+      <button class="icon-btn" data-month="1" aria-label="下个月">›</button>
+    </div>
+    <button class="icon-btn" id="btnSearch" aria-label="搜索">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
     </button>
-    <p id="micHint" class="hint">点一下话筒，说：“在 Countdown 买了牛奶面包，12 块 5 纽币”</p>
-    <div class="say-row">
-      <input id="sayText" type="text" placeholder="或者在这里打字 / 用键盘上的🎤听写" autocomplete="off">
-      <button id="btnParse" class="btn">识别</button>
-    </div>
+  </header>
+  <div class="search-row" id="searchRow" hidden>
+    <input id="searchInput" type="search" placeholder="搜索商家、物品、分类、金额…" autocomplete="off">
+    <button class="link" id="btnSearchClose">关闭</button>
+  </div>
+
+  <!-- 明细 -->
+  <section class="view" id="view-trans">
+    <nav class="tabs" id="transTabs">
+      <button data-tab="daily" class="on">每日</button>
+      <button data-tab="calendar">日历</button>
+      <button data-tab="monthly">月度</button>
+    </nav>
+    <div class="totals" id="totals"></div>
+    <div id="transBody"></div>
   </section>
 
-  <form id="form" class="card" hidden>
-    <div class="form-head">
-      <h2 id="formTitle">确认这条记录</h2>
-      <button type="button" id="btnCancel" class="link">取消</button>
-    </div>
-    <div class="grid">
-      <label>商店<input name="store" placeholder="例如 New World"></label>
-      <label>物品<input name="item" placeholder="例如 牛奶、面包"></label>
-      <label>金额<input name="amount" type="number" inputmode="decimal" step="0.01" min="0" required></label>
-      <div class="field">
-        <span>币种</span>
-        <div class="seg" role="radiogroup">
-          <label><input type="radio" name="currency" value="CNY"><span>¥ 人民币</span></label>
-          <label><input type="radio" name="currency" value="NZD"><span>NZ$ 纽币</span></label>
-        </div>
+  <!-- 统计 -->
+  <section class="view" id="view-stats" hidden>
+    <nav class="tabs" id="statsTabs">
+      <button data-kind="expense" class="on">支出</button>
+      <button data-kind="income">收入</button>
+    </nav>
+    <div id="statsBody"></div>
+  </section>
+
+  <!-- 账户 -->
+  <section class="view" id="view-accounts" hidden>
+    <div id="accountsBody"></div>
+  </section>
+
+  <!-- 设置 -->
+  <section class="view" id="view-settings" hidden>
+    <div class="settings">
+      <h2>识别</h2>
+      <label class="row">识别方式
+        <select id="setParser">
+          <option value="local">本地规则（免费、离线）</option>
+          <option value="ai">AI（Claude，更聪明，需要 API Key）</option>
+        </select>
+      </label>
+      <div id="aiSettings">
+        <label class="row">Anthropic API Key
+          <input id="setApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
+        </label>
+        <label class="row">AI 模型
+          <select id="setModel">
+            <option value="claude-opus-5-5">Claude Opus 5.5（最准）</option>
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5（便宜一半）</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5（最便宜、最快）</option>
+          </select>
+        </label>
+        <p class="small">Key 只保存在这台设备上，直接发给 Anthropic。没网或出错时会自动改用本地规则。</p>
       </div>
-      <label>分类<select name="category" id="catSelect"></select></label>
-      <label>日期<input name="date" type="date" required></label>
-      <label class="wide">原话 / 备注<input name="note"></label>
-    </div>
-    <button type="submit" class="btn primary block">保存</button>
-  </form>
+      <label class="row switch">保存前先让我确认
+        <input type="checkbox" id="setConfirm">
+      </label>
 
-  <section>
-    <div class="list-head">
-      <h2>记录</h2>
-      <select id="monthFilter" aria-label="月份"></select>
+      <h2>货币与账户</h2>
+      <label class="row">统计用的主货币
+        <select id="setMainCur"><option value="CNY">¥ 人民币</option><option value="NZD">NZ$ 纽币</option></select>
+      </label>
+      <label class="row">没说币种时默认
+        <select id="setDefaultCur"><option value="NZD">NZ$ 纽币</option><option value="CNY">¥ 人民币</option></select>
+      </label>
+      <label class="row">汇率：1 纽币 = ? 人民币
+        <span class="inline"><input id="setRate" type="number" step="0.0001" min="0" inputmode="decimal"><button class="btn" id="btnRate">在线更新</button></span>
+      </label>
+      <label class="row">账户（用逗号分开）
+        <input id="setAccounts" placeholder="卡, 现金, 微信, 支付宝">
+      </label>
+      <label class="row">默认账户
+        <select id="setDefaultAcc"></select>
+      </label>
+      <label class="row">外观
+        <select id="setTheme"><option value="auto">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+      </label>
+
+      <h2>数据</h2>
+      <div class="grid2">
+        <label class="btn file-btn">导入 Money 的 Excel<input type="file" id="fileImport" accept=".xls,.xlsx,.csv,.tsv" hidden></label>
+        <button class="btn" id="btnCsv">导出 CSV</button>
+        <button class="btn" id="btnBackup">备份 JSON</button>
+        <label class="btn file-btn">恢复备份<input type="file" id="fileRestore" accept=".json,application/json" hidden></label>
+        <button class="btn" id="btnForget">清除已学会的商家</button>
+        <button class="btn danger" id="btnClear">清空全部记录</button>
+      </div>
+      <p class="small" id="dataInfo"></p>
     </div>
-    <ul id="list" class="list"></ul>
-    <p id="empty" class="empty" hidden>还没有记录。点上面的话筒说一句试试。</p>
   </section>
-</main>
+</div>
 
-<dialog id="settings">
-  <form method="dialog" class="settings">
-    <h2>设置</h2>
-    <label>没说币种时默认用
-      <select id="setDefaultCur">
-        <option value="NZD">NZ$ 纽币</option>
-        <option value="CNY">¥ 人民币</option>
-      </select>
-    </label>
-    <label>汇率：1 纽币 = ? 人民币（用于合计折算）
-      <input id="setRate" type="number" step="0.0001" min="0" inputmode="decimal">
-    </label>
-    <div class="settings-actions">
-      <button type="button" id="btnCsv" class="btn">导出 CSV（Excel）</button>
-      <button type="button" id="btnBackup" class="btn">备份 JSON</button>
-      <label class="btn file-btn">恢复备份<input type="file" id="fileRestore" accept="application/json,.json" hidden></label>
-      <button type="button" id="btnClear" class="btn danger">清空全部记录</button>
+<!-- 一句话输入 -->
+<div class="composer">
+  <div class="live" id="live" hidden></div>
+  <form class="compose-row" id="composeForm">
+    <button type="button" class="mic" id="btnMic" aria-label="语音输入">
+      <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+    </button>
+    <textarea id="composeInput" rows="1" placeholder="一句话记一笔：Countdown 买菜 41" enterkeyhint="send"></textarea>
+    <button type="submit" class="send" id="btnSend" aria-label="记账">
+      <svg viewBox="0 0 24 24"><path d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z"/></svg>
+    </button>
+  </form>
+  <nav class="bottom-nav" id="bottomNav">
+    <button data-view="trans" class="on"><span>📒</span>明细</button>
+    <button data-view="stats"><span>📊</span>统计</button>
+    <button data-view="accounts"><span>💳</span>账户</button>
+    <button data-view="settings"><span>⚙️</span>设置</button>
+  </nav>
+</div>
+
+<!-- 确认 / 编辑 -->
+<dialog id="sheet" class="sheet">
+  <form method="dialog" id="sheetForm">
+    <div class="sheet-head">
+      <h2 id="sheetTitle" tabindex="-1" autofocus>确认记录</h2>
+      <button value="cancel" class="link" formnovalidate>取消</button>
     </div>
-    <p class="small">数据只保存在这台设备的浏览器里。换手机或清理浏览器前请先“备份 JSON”。</p>
-    <button value="close" class="btn primary block">完成</button>
+    <div id="sheetCards"></div>
+    <div class="sheet-actions">
+      <button type="button" class="btn danger" id="btnDelete" hidden>删除</button>
+      <button type="submit" value="save" class="btn primary" id="btnSave">保存</button>
+    </div>
   </form>
 </dialog>
 
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastAction" class="link" hidden></button></div>
+<div id="tip" class="tip" hidden></div>
+<datalist id="storeList"></datalist>
 <script type="module" src="app.js"></script>
 </body>
 </html>
