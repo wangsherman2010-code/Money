@@ -152,12 +152,8 @@
 
 <!-- 一句话输入 -->
 <div class="composer">
-  <div class="live" id="live" hidden></div>
   <form class="compose-row" id="composeForm">
-    <button type="button" class="mic" id="btnMic" aria-label="语音输入" data-en-aria="Voice input">
-      <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
-    </button>
-    <textarea id="composeInput" rows="1" placeholder="一句话记一笔：Countdown 买菜 41" data-en-ph="One line: Countdown groceries 41" enterkeyhint="send"></textarea>
+    <textarea id="composeInput" rows="1" placeholder="说一条记录花费，如 Countdown 买菜 41" data-en-ph="Say or type a spend, e.g. Countdown groceries 41" enterkeyhint="send"></textarea>
     <button type="submit" class="send" id="btnSend" aria-label="记账" data-en-aria="Record">
       <svg viewBox="0 0 24 24"><path d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z"/></svg>
     </button>
@@ -204,7 +200,6 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastAction" class="link" hidden></button></div>
 <div id="tip" class="tip" hidden></div>
-<datalist id="storeList"></datalist>
 <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -169,7 +169,6 @@ function render() {
   if (state.view === 'stats') renderStats();
   if (state.view === 'accounts') renderAccounts();
   if (state.view === 'settings') renderSettings();
-  $('#storeList').innerHTML = Object.values(memory).map(v => `<option value="${esc(v.name)}">`).join('');
 }
 
 function matchesSearch(r, q) {
@@ -544,6 +543,61 @@ function addRecord(r) {
   return rec;
 }
 
+/* ---------------- 商家推荐 ---------------- */
+// 每个商家一个分数：用过的次数，越近的越重要（约 3 个月减半）；
+// 和这张卡片同分类、同账户、物品相似的记录额外加分。输入了文字时按文字过滤。
+const words = s => String(s || '').toLowerCase().split(/[\s,，、.。·\/]+/).filter(w => w.length >= 2);
+const similar = (a, b) => { const A = words(a), B = words(b); return A.some(x => B.some(y => x.includes(y) || y.includes(x))); };
+function suggestStores({ q = '', type = 'expense', category = '', account = '', item = '' } = {}) {
+  const stats = new Map(), nowT = Date.now();
+  const boostCat = category && category !== fallbackCat(type);
+  for (const r of records) {
+    if (!r.store) continue;
+    const k = memoryKey(r.store);
+    let s = stats.get(k);
+    if (!s) stats.set(k, s = { name: r.store, score: 0, count: 0, last: '', cats: {} });
+    const age = Math.max(0, (nowT - new Date(r.date + 'T12:00:00')) / 864e5);
+    let w = Math.pow(0.5, age / 90);
+    if (r.type !== type) w *= 0.3;
+    if (boostCat && r.category === category) w *= 3;
+    if (account && r.account === account) w *= 1.3;
+    if (item && r.item && similar(item, r.item)) w *= 2.5;
+    s.score += w; s.count++;
+    if (r.date >= s.last) { s.last = r.date; s.name = r.store; }
+    s.cats[r.category] = (s.cats[r.category] || 0) + 1;
+  }
+  for (const [k, m] of Object.entries(memory)) if (!stats.has(k)) stats.set(k, { name: m.name, score: 0.01, count: 0, last: '', cats: { [m.category]: 1 } });
+  let list = [...stats.values()];
+  const nq = memoryKey(q);
+  if (nq) {
+    list = list.filter(s => memoryKey(s.name).includes(nq));
+    list.sort((a, b) => (memoryKey(b.name).startsWith(nq) - memoryKey(a.name).startsWith(nq)) || b.score - a.score);
+  } else list.sort((a, b) => b.score - a.score);
+  return list.slice(0, 8).map(s => ({ ...s, cat: Object.entries(s.cats).sort((a, b) => b[1] - a[1])[0]?.[0] }));
+}
+function fmtShortDate(d) { if (!d) return ''; const [, m, day] = d.split('-').map(Number); return isEn() ? `${day} ${MON[m - 1]}` : `${m}/${day}`; }
+function openSuggest(card, filter) {
+  const box = card.querySelector('.suggest'), inp = card.querySelector('[name=store]');
+  const f = n => card.querySelector(`[name=${n}]`)?.value || '';
+  const list = suggestStores({ q: filter ? inp.value : '', type: card.dataset.type, category: f('category'), account: f('account'), item: f('item') });
+  if (!list.length) {
+    if (filter) { box.hidden = true; return; }
+    box.innerHTML = `<div class="sg-empty">${L('还没有记过商家。记几笔之后，这里会推荐你常去的地方。', 'No stores yet — after a few records, your usual places show up here.')}</div>`;
+  } else {
+    const cur = memoryKey(inp.value);
+    box.innerHTML = `<div class="sg-head">${filter ? L('匹配的商家', 'Matching stores') : L('推荐商家（常去、最近、同类）', 'Suggested (frequent, recent, similar)')}</div>` +
+      list.map(s => `<button type="button" class="sg ${memoryKey(s.name) === cur ? 'on' : ''}" data-name="${esc(s.name)}">
+        <span class="sg-e">${catEmoji(card.dataset.type, s.cat)}</span>
+        <span class="sg-n">${esc(s.name)}</span>
+        <span class="sg-m">${esc(catLabel(card.dataset.type, s.cat))}${s.count ? ' · ' + L(`${s.count} 次`, `${s.count}×`) : ''}${s.last ? ' · ' + fmtShortDate(s.last) : ''}</span>
+      </button>`).join('');
+  }
+  box.hidden = false;
+  requestAnimationFrame(() => box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+}
+const closeSuggest = () => $$('.suggest').forEach(b => b.hidden = true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.combo')) closeSuggest(); });
+
 /* ---------------- 确认 / 编辑面板 ---------------- */
 let sheetEditId = null;
 const sheet = $('#sheet');
@@ -571,7 +625,7 @@ function cardHtml(r, i, multi) {
         <input name="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="${L('金额', 'Amount')}" value="${r.amount ?? ''}" required>
         ${curPicker(r.currency || settings.defaultCurrency)}
       </div>
-      <label>${L('商家', 'Store')}<input name="store" list="storeList" value="${esc(r.store)}" placeholder="Woolworth Westgate"></label>
+      <label>${L('商家', 'Store')}<span class="combo"><input name="store" value="${esc(r.store)}" placeholder="${L('输入或点 ▾ 选', 'Type or tap ▾')}" autocomplete="off"><button type="button" class="combo-btn" aria-label="${L('推荐商家', 'Suggested stores')}">▾</button><span class="suggest" hidden></span></span></label>
       <label>${L('物品 / 说明', 'Item / note')}<input name="item" value="${esc(r.item)}" placeholder="${L('买菜', 'groceries')}"></label>
       <label>${L('分类', 'Category')}<select name="category">${catOptions(type, r.category)}</select></label>
       <label>${L('账户', 'Account')}<select name="account"><option value="">${L('（不指定）', '(none)')}</option>${accs.map(a => `<option ${a === r.account ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
@@ -596,6 +650,19 @@ function openSheet(recs, editId = null) {
 $('#sheetCards').addEventListener('click', e => {
   const card = e.target.closest('.ecard');
   if (!card) return;
+  if (e.target.closest('.combo-btn')) {
+    const box = card.querySelector('.suggest');
+    if (box.hidden) { closeSuggest(); openSuggest(card, false); } else box.hidden = true;
+    return;
+  }
+  const sg = e.target.closest('.sg');
+  if (sg) {
+    const inp = card.querySelector('[name=store]');
+    inp.value = sg.dataset.name;
+    inp.dispatchEvent(new Event('change', { bubbles: true })); // 带出学过的分类/账户
+    closeSuggest();
+    return;
+  }
   if (e.target.classList.contains('x')) {
     card.remove();
     const n = $$('#sheetCards .ecard').length;
@@ -633,6 +700,13 @@ $('#sheetCards').addEventListener('change', e => {
     if (m.account) card.querySelector('[name=account]').value = m.account;
   }
 });
+// 打字时显示匹配的商家
+$('#sheetCards').addEventListener('input', e => {
+  if (e.target.name !== 'store') return;
+  const card = e.target.closest('.ecard');
+  if (e.target.value.trim()) openSuggest(card, true); else card.querySelector('.suggest').hidden = true;
+});
+$('#sheetCards').addEventListener('keydown', e => { if (e.key === 'Escape' && e.target.name === 'store') { e.preventDefault(); closeSuggest(); } });
 $('#sheetCards').addEventListener('focusin', e => { if (e.target.name === 'category') e.target.dataset.prev = e.target.value; });
 
 $('#sheetForm').addEventListener('submit', e => {
@@ -666,6 +740,7 @@ $('#btnDelete').onclick = () => {
   toast(L('已删除', 'Deleted'), { label: undoLabel(), fn: () => { records.push(rec); saveRecords(); render(); } });
 };
 sheet.addEventListener('click', e => { if (e.target === sheet) sheet.close(); });
+sheet.addEventListener('close', closeSuggest);
 
 /* ---------------- 交互绑定 ---------------- */
 $('#monthNav').addEventListener('click', e => { const b = e.target.closest('[data-month]'); if (b) shiftMonth(+b.dataset.month); });
@@ -713,36 +788,6 @@ input.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#composeForm').requestSubmit(); }
 });
 $('#composeForm').addEventListener('submit', e => { e.preventDefault(); submitText(input.value); });
-
-// 语音
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-const mic = $('#btnMic'), live = $('#live');
-let rec = null, listening = false, liveHint = '';
-mic.onclick = () => {
-  if (!SR) { toast(L('这个浏览器不支持语音，请用键盘上的🎤听写', 'Voice isn’t supported here — use the keyboard 🎤 dictation')); input.focus(); return; }
-  if (listening) { rec.stop(); return; }
-  rec = new SR();
-  rec.lang = isEn() ? 'en-NZ' : 'zh-CN'; rec.interimResults = true; rec.continuous = false;
-  let finalText = '';
-  liveHint = L('正在听…（中英文都可以）', 'Listening…');
-  rec.onstart = () => { listening = true; mic.classList.add('listening'); live.hidden = false; live.textContent = liveHint; };
-  rec.onresult = e => {
-    let interim = ''; finalText = '';
-    for (const res of e.results) res.isFinal ? finalText += res[0].transcript : interim += res[0].transcript;
-    live.textContent = finalText + interim;
-  };
-  rec.onerror = e => toast({
-    'not-allowed': L('没有麦克风权限', 'Microphone permission denied'),
-    'no-speech': L('没听到声音', 'Didn’t hear anything'),
-    network: L('语音识别需要联网', 'Voice recognition needs internet'),
-  }[e.error] || L('语音出错：', 'Voice error: ') + e.error);
-  rec.onend = () => {
-    listening = false; mic.classList.remove('listening'); live.hidden = true;
-    const text = finalText || (live.textContent === liveHint ? '' : live.textContent);
-    if (text) { input.value = text; autosize(); submitText(text); }
-  };
-  try { rec.start(); } catch (err) { toast(L('无法启动语音：', 'Could not start voice: ') + err.message); }
-};
 
 /* ---------------- 设置 ---------------- */
 const bindSetting = (sel, key, fn = v => v, after) => $(sel).addEventListener('change', e => {
