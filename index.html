@@ -156,6 +156,24 @@
         </select>
       </label>
 
+      <h2 data-en="Family sharing (your own server)">家庭共享（你自己的服务器）</h2>
+      <p class="small" data-en="Two phones share one ledger through the small sync server on your own VPS (see server/README). Nothing goes to any other cloud.">两台手机通过你自己 VPS 上的同步程序共用一个账本（安装方法见 server/README）。数据不经过任何别人的云。</p>
+      <label class="row"><span data-en="Server address">服务器地址</span>
+        <input id="setSyncUrl" type="url" inputmode="url" placeholder="https://money.example.com" autocomplete="off">
+      </label>
+      <label class="row"><span data-en="Family password (same on both phones)">家庭密码（两台手机填一样的）</span>
+        <input id="setSyncToken" type="password" autocomplete="off">
+      </label>
+      <label class="row"><span data-en="My name (shown on records I add)">我的名字（显示在我记的账上）</span>
+        <input id="setMember" placeholder="Sherman" autocomplete="off">
+      </label>
+      <div class="grid2">
+        <button class="btn primary" id="btnSyncJoin"></button>
+        <button class="btn" id="btnSyncNow" data-en="Sync now">立即同步</button>
+      </div>
+      <p class="small" id="syncStatus"></p>
+      <button class="link" id="btnSyncLeave" hidden data-en="Disconnect (keep records on this phone)">断开（本机记录保留）</button>
+
       <h2 data-en="Data">数据</h2>
       <div class="grid2">
         <label class="btn file-btn"><span data-en="Import Money Excel">导入 Money 的 Excel</span><input type="file" id="fileImport" accept=".xls,.xlsx,.csv,.tsv" hidden></label>

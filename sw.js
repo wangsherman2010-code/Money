@@ -1,5 +1,5 @@
-const CACHE = 'voice-ledger-v7';
-const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'parser.js', 'currencies.js', 'ai.js', 'importer.js', 'manifest.webmanifest',
+const CACHE = 'voice-ledger-v8';
+const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'parser.js', 'currencies.js', 'sync.js', 'ai.js', 'importer.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -12,6 +12,7 @@ self.addEventListener('activate', e => {
 // 网络优先（拿到最新版本），断网时用缓存
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
+  if (url.pathname.startsWith('/api/')) return; // 同步接口永远走网络
   if (e.request.method !== 'GET' || (url.origin !== location.origin && !['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname))) return;
   e.respondWith(
     fetch(e.request).then(res => {

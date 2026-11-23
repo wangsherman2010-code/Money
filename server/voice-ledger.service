@@ -1,0 +1,25 @@
+[Unit]
+Description=One-line Ledger family sync server
+After=network.target
+
+[Service]
+Type=simple
+# 换成你在 VPS 上的用户名（不要用 root）
+User=ubuntu
+WorkingDirectory=/opt/money/server
+ExecStart=/usr/bin/node /opt/money/server/server.js
+# 换成你自己的家庭密码（至少 8 位）
+Environment=TOKEN=change-this-family-password
+Environment=PORT=8787
+Environment=HOST=127.0.0.1
+Restart=on-failure
+RestartSec=3
+# 安全加固：只允许写数据目录
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/money/server/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

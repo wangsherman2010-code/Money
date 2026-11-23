@@ -1,5 +1,6 @@
 import { parseMany, EXPENSE_CATS, INCOME_CATS, matchCategory, memoryKey } from './parser.js';
 import { CURRENCIES, CODES, sym, dec, cname, defaultRates } from './currencies.js';
+import { createSync, ping } from './sync.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -18,6 +19,7 @@ let settings = {
   mainCurrency: 'CNY', defaultCurrency: 'NZD', currencies: ['NZD', 'CNY'],
   accounts: ['卡', '现金', '微信', '支付宝'], defaultAccount: '卡', theme: 'auto',
   fontSize: 1, fontWeight: 'medium', font: 'system', fontEn: 'same',
+  syncUrl: '', syncToken: '', member: '', syncOn: false,
   ...store.get(SKEY, {}),
 };
 // 汇率：rates[X] = 1 纽币能换多少 X。旧版只有 settings.rate（1 NZD = ? CNY）
@@ -27,9 +29,11 @@ const enabled = () => settings.currencies.filter(c => CURRENCIES[c]);
 // 旧版记录没有 type/account，补上
 let records = store.get(KEY, []).map(r => ({ type: 'expense', account: '', ...r }));
 let memory = store.get(MKEY, {});
-const saveRecords = () => store.set(KEY, records);
-const saveSettings = () => store.set(SKEY, settings);
-const saveMemory = () => store.set(MKEY, memory);
+let sync = null; // 家庭同步（连了自己的服务器才会真正上传）
+// 每次保存后让同步模块找出改动；它给改动打上时间戳后再存一次
+const saveRecords = () => { store.set(KEY, records); if (sync?.noteRecords()) store.set(KEY, records); };
+const saveSettings = () => { store.set(SKEY, settings); sync?.noteMeta(); };
+const saveMemory = () => { store.set(MKEY, memory); if (sync?.noteMemory()) store.set(MKEY, memory); };
 
 /* ---------------- 语言 ---------------- */
 const isEn = () => settings.lang === 'en';
@@ -77,6 +81,27 @@ function adoptUnknownCats() {
   if (changed) saveSettings();
 }
 adoptUnknownCats();
+
+/* ---------------- 家庭同步 ---------------- */
+const syncOn = () => !!(settings.syncOn && settings.syncUrl && settings.syncToken);
+let syncStatus = { state: 'idle' };
+sync = createSync({
+  getRecords: () => records,
+  setRecords: list => { records = list; store.set(KEY, records); },
+  getMemory: () => memory,
+  setMemory: m => { memory = m; store.set(MKEY, memory); },
+  getMeta: () => ({ cats: settings.cats, accounts: settings.accounts }),
+  setMeta: v => {
+    if (v?.cats?.expense && v?.cats?.income) settings.cats = v.cats;
+    if (Array.isArray(v?.accounts) && v.accounts.length) settings.accounts = v.accounts;
+    store.set(SKEY, settings);
+  },
+  getConfig: () => syncOn() ? { url: settings.syncUrl, token: settings.syncToken, member: settings.member } : { member: settings.member },
+  onChange: () => { adoptUnknownCats(); render(); },
+  onStatus: s => { syncStatus = s; if (state.view === 'settings') renderSyncStatus(); },
+  offlineText: () => L('没有网络，或服务器连不上。记录先存在手机上，有网后自动上传', 'Offline or server unreachable — records are kept and will upload later'),
+});
+const byLabel = r => syncOn() && r.by && r.by !== settings.member ? r.by : '';
 const kwList = s => String(s || '').split(/[,，、;；\n]/).map(x => x.trim()).filter(Boolean);
 const catsOf = type => settings.cats[type] || [];
 const findCat = (type, id) => catsOf(type).find(c => c.id === id) || catsOf(type === 'income' ? 'expense' : 'income').find(c => c.id === id);
@@ -206,7 +231,8 @@ function dayListHtml(rows) {
     </div>`;
     for (const r of list) {
       const title = r.store || r.item || L('（未填写）', '(blank)');
-      const subline = [r.store ? r.item : '', r.account].filter(Boolean).join(' · ');
+      const who = byLabel(r);
+      const subline = [who ? '👤 ' + who : '', r.store ? r.item : '', r.account].filter(Boolean).join(' · ');
       const conv = r.currency !== c ? `<small>≈ ${money(toMain(r.amount, r.currency), c)}</small>` : '';
       html += `<div class="rec" data-id="${esc(r.id)}">
         <div class="cat"><b>${catEmoji(r.type, r.category)}</b>${esc(catLabel(r.type, r.category))}</div>
@@ -290,6 +316,13 @@ function renderStats() {
       <span class="bar"><i style="width:${(v / max * 100).toFixed(1)}%"></i></span>
       <span class="val">${money(v, c)}<small>${(v / total * 100).toFixed(0)}%</small></span></div>`).join('')
     : `<div class="empty" style="padding:16px">${L('这个月没有' + label + '记录', 'No ' + label + ' this month')}</div>`;
+  // 两个人都记过账时：按人分开看
+  const people = {};
+  for (const r of rows) { const p = r.by || settings.member || L('我', 'Me'); people[p] = (people[p] || 0) + toMain(r.amount, r.currency); }
+  if (syncOn() && Object.keys(people).length > 1) {
+    html += `<div class="people"><div class="sub" style="margin:12px 0 4px">${L('按人', 'By person')}</div>` +
+      Object.entries(people).sort((a, b) => b[1] - a[1]).map(([p, v]) => `<div class="prow"><span>👤 ${esc(p)}${p === settings.member ? L('（我）', ' (me)') : ''}</span><span class="num">${money(v, c)} <small>${(v / total * 100).toFixed(0)}%</small></span></div>`).join('') + '</div>';
+  }
   html += '</div>';
 
   // 近 6 个月趋势
@@ -412,10 +445,61 @@ function renderSettings() {
   $('#setFont').value = settings.font;
   $('#setFontEn').innerHTML = Object.entries(FONTS_EN).map(([k, f]) => `<option value="${k}">${L(f.zh, f.en)}</option>`).join('');
   $('#setFontEn').value = settings.fontEn;
+  renderSyncSettings();
   $('#dataInfo').textContent = L(
     `共 ${records.length} 条记录，已学会 ${Object.keys(memory).length} 个商家。数据只存在这台设备的浏览器里，请定期“备份 JSON”。`,
     `${records.length} records, ${Object.keys(memory).length} learned stores. Data lives only in this device’s browser — back up regularly.`);
 }
+
+/* ---------------- 家庭同步：设置界面 ---------------- */
+function renderSyncStatus() {
+  const el = $('#syncStatus');
+  if (!el) return;
+  const t = syncStatus.at ? new Date(syncStatus.at).toLocaleTimeString(isEn() ? 'en-NZ' : 'zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+  const pend = syncStatus.pending ? L(`，${syncStatus.pending} 条等待上传`, `, ${syncStatus.pending} waiting to upload`) : '';
+  el.textContent = !syncOn() ? L('还没连接。数据只在这台手机上。', 'Not connected — data stays on this phone only.')
+    : syncStatus.state === 'syncing' ? L('同步中…', 'Syncing…')
+    : syncStatus.state === 'error' ? L('⚠️ 同步失败：', '⚠️ Sync failed: ') + syncStatus.error + pend
+    : syncStatus.state === 'ok' ? L(`✅ 已同步 ${t}`, `✅ Synced ${t}`) + pend
+    : L('已连接', 'Connected');
+  $('#btnSyncLeave').hidden = !syncOn();
+  $('#btnSyncNow').hidden = !syncOn();
+  $('#btnSyncJoin').textContent = syncOn() ? L('重新连接', 'Reconnect') : L('连接并同步', 'Connect & sync');
+}
+let originChecked = false;
+function renderSyncSettings() {
+  $('#setSyncUrl').value = settings.syncUrl;
+  $('#setSyncToken').value = settings.syncToken;
+  $('#setMember').value = settings.member;
+  renderSyncStatus();
+  // App 就是从你的服务器打开的：自动填上地址
+  if (!settings.syncUrl && !originChecked && location.protocol.startsWith('http')) {
+    originChecked = true;
+    ping(location.origin).then(() => { if (!$('#setSyncUrl').value) $('#setSyncUrl').value = location.origin; }).catch(() => {});
+  }
+}
+$('#btnSyncJoin').onclick = async () => {
+  const url = $('#setSyncUrl').value.trim().replace(/\/+$/, ''), token = $('#setSyncToken').value.trim(), member = $('#setMember').value.trim();
+  if (!url || !token || !member) { toast(L('请填好服务器地址、家庭密码和你的名字', 'Fill in server address, family password and your name')); return; }
+  if (!/^https:\/\//.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)/.test(url)) { toast(L('地址要以 https:// 开头', 'Address must start with https://')); return; }
+  try { await ping(url); } catch { toast(L('连不上这个服务器，请检查地址', 'Can’t reach that server — check the address')); return; }
+  const first = !settings.syncOn || settings.syncUrl !== url;
+  Object.assign(settings, { syncUrl: url, syncToken: token, member, syncOn: true });
+  store.set(SKEY, settings);
+  if (first) sync.prepareJoin();
+  const r = await sync.syncNow();
+  if (!r.ok) {
+    if (r.status === 401) { settings.syncOn = false; store.set(SKEY, settings); }
+    toast(L('同步失败：', 'Sync failed: ') + r.error);
+  } else toast(L(`已连接！家庭账本里现在共 ${records.length} 条记录`, `Connected! The family ledger now has ${records.length} records`));
+  render();
+};
+$('#btnSyncNow').onclick = async () => { const r = await sync.syncNow(); toast(r.ok ? L('已同步', 'Synced') : L('同步失败：', 'Sync failed: ') + r.error); };
+$('#btnSyncLeave').onclick = () => {
+  if (!confirm(L('断开家庭共享？这台手机上的记录会保留，之后的改动不再同步。', 'Disconnect? Records on this phone are kept, but changes stop syncing.'))) return;
+  settings.syncOn = false; store.set(SKEY, settings); sync.reset(); syncStatus = { state: 'idle' }; render();
+};
+$('#setMember').addEventListener('change', e => { settings.member = e.target.value.trim(); store.set(SKEY, settings); });
 
 /* ---------------- 编辑分类 ---------------- */
 const catDialog = $('#catDialog');
@@ -864,7 +948,7 @@ $('#btnCsv').onclick = () => {
     [r.date, r.type === 'income' ? L('收入', 'Income') : L('支出', 'Expense'), catLabel(r.type, r.category), r.store, r.item, r.amount, r.currency, r2(toMain(r.amount, r.currency)), r.account, r.note].map(q).join(','));
   download(`${L('记账', 'ledger')}-${todayStr()}.csv`, '﻿' + [head.join(','), ...lines].join('\r\n'), 'text/csv;charset=utf-8');
 };
-$('#btnBackup').onclick = () => download(`${L('记账备份', 'ledger-backup')}-${todayStr()}.json`, JSON.stringify({ version: 3, records, memory, settings: { ...settings, apiKey: '', deepseekKey: '' } }, null, 2), 'application/json');
+$('#btnBackup').onclick = () => download(`${L('记账备份', 'ledger-backup')}-${todayStr()}.json`, JSON.stringify({ version: 3, records, memory, settings: { ...settings, apiKey: '', deepseekKey: '', syncToken: '' } }, null, 2), 'application/json');
 $('#fileRestore').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
@@ -905,7 +989,10 @@ $('#fileImport').onchange = async e => {
 };
 $('#btnForget').onclick = () => { if (confirm(L('清除所有已学会的商家？（记录不会删除）', 'Forget all learned stores? (Records are kept.)'))) { memory = {}; saveMemory(); render(); } };
 $('#btnClear').onclick = () => {
-  if (records.length && confirm(L(`确定清空全部 ${records.length} 条记录？建议先备份。`, `Delete all ${records.length} records? Back up first!`))) { records = []; saveRecords(); render(); toast(L('已清空', 'All deleted')); }
+  const msg = syncOn()
+    ? L(`你正在和家人共享账本。清空会把两个人手机上、服务器上的全部 ${records.length} 条记录都删掉！确定吗？`, `This ledger is shared. All ${records.length} records will be deleted for everyone, including the server. Are you sure?`)
+    : L(`确定清空全部 ${records.length} 条记录？建议先备份。`, `Delete all ${records.length} records? Back up first!`);
+  if (records.length && confirm(msg)) { records = []; saveRecords(); render(); toast(L('已清空', 'All deleted')); }
 };
 
 /* ---------------- 启动 ---------------- */
@@ -914,4 +1001,5 @@ if (!Object.keys(memory).length) records.forEach(r => r.store && learn(r));
 applyTheme();
 applyStaticText();
 render();
+if (syncOn()) sync.schedule(300);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

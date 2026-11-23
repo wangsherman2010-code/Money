@@ -29,6 +29,7 @@ Uber 23 USD                              → 交通 · Uber · US$23
 | 🗂 分类可编辑 | 改名称（中文 + 英文）、换图标、调顺序、新建、删除；每个分类可以写关键词帮助自动识别，比如“宠物：猫粮, pet, vet” |
 | 🌏 中英文界面 | 设置里一键切换中文 / English |
 | 🔠 外观 | 文字大小 5 档、粗细 3 档；中文字体 6 种，英文字体另选 8 种（Inter、Roboto、Lato、Nunito、Merriweather、Playfair、JetBrains Mono…）；深浅色 |
+| 👨‍👩 家庭共享 | 两台手机共用一个账本，通过**你自己 VPS** 上的小同步程序（`server/`），不经过任何第三方云；每笔显示是谁记的，统计可按人看。安装见 [server/README.md](server/README.md) |
 | 📴 离线 | 本地识别完全离线；数据只保存在你的手机里 |
 
 ## 两种识别方式
@@ -57,6 +58,8 @@ Uber 23 USD                              → 交通 · Uber · US$23
 | `currencies.js` | 货币表：符号、中文名、各种说法、默认汇率 |
 | `ai.js` | 可选的 AI 识别（Claude / DeepSeek） |
 | `importer.js` | Excel / CSV 导入 |
+| `sync.js` | 家庭同步（手机端） |
+| `server/` | 家庭同步服务器（装在你的 VPS 上，零依赖） |
 | `sw.js` / `manifest.webmanifest` | 离线和安装 |
 
 本地测试：`python3 -m http.server 8000`，打开 http://localhost:8000

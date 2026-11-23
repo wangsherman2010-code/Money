@@ -239,3 +239,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .sg-e { grid-row: 1 / span 2; font-size: calc(18px * var(--fs)); align-self: center; }
 .sg-n { font-size: calc(15px * var(--fs)); font-weight: var(--fwb); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sg-m { font-size: calc(12px * var(--fs)); color: var(--muted); }
+
+/* 按人统计 */
+.people { border-top: 1px solid var(--line); margin-top: 10px; }
+.prow { display: flex; justify-content: space-between; padding: 6px 0; font-size: calc(15px * var(--fs)); }
+.prow small { color: var(--muted); margin-left: 4px; }
+#btnSyncLeave { padding-left: 0; }
