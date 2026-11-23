@@ -22,7 +22,7 @@ Uber 23 USD                              → 交通 · Uber · US$23
 | 🔍 搜索 | 按商家、物品、分类、金额搜索全部记录 |
 | 🏪 商家推荐 | 商家栏点 ▾ 显示推荐：常去的、最近去的、和这笔同类的排在前面；打字时显示匹配的商家 |
 | 🧠 越用越聪明 | 记住每个商家的分类、账户和币种，下次只写“Woolworth Westgate 41”就够了 |
-| 🤖 AI 识别（可选） | 填入 Anthropic API Key，用 Claude 理解更复杂的句子，比如“给 Ingrid 在 Under Amore 买内衣 106，又在 Skechers 买鞋 120”会拆成两笔 |
+| 🤖 AI 识别（可选） | 可选 Claude 或 DeepSeek，填入对应的 API Key，用 AI 理解更复杂的句子，比如“给 Ingrid 在 Under Amore 买内衣 106，又在 Skechers 买鞋 120”会拆成两笔 |
 | 💱 多币种 | 人民币、纽币、美元、英镑、欧元、澳元、日元、港币、加元、新加坡元、新台币、韩元、泰铢、马币、瑞士法郎。在设置里勾选常用的；每笔保留原币种，统计时按汇率折算成主货币，汇率可一键在线更新 |
 | 📥 导入 | 可直接导入 Money Manager 等 App 导出的 Excel（.xls/.xlsx/.csv） |
 | 📤 导出 | CSV（Excel 能打开）、JSON 备份与恢复 |
@@ -33,9 +33,11 @@ Uber 23 USD                              → 交通 · Uber · US$23
 
 ## 两种识别方式
 - **本地规则**（默认）：免费、离线、即时。适合“商家 物品 金额”这种写法，中英文都行。
-- **AI（Claude）**：在“设置 → 识别方式”切换，填入你自己的 [Anthropic API Key](https://console.anthropic.com/)。
+- **AI**：在“设置 → 识别方式”选 AI，再选服务：
+  - **DeepSeek**：在 [platform.deepseek.com](https://platform.deepseek.com/) 申请 Key，默认用 deepseek-chat，便宜、中文好。
+  - **Claude**：填入你自己的 [Anthropic API Key](https://console.anthropic.com/)。
   - 默认 Claude Opus 5.5，记一笔大约花不到 0.01 美元；也可以选更便宜的 Sonnet 5.5 或 Haiku 5.5。
-  - Key 只存在手机本地，请求从手机直接发给 Anthropic。
+  - Key 只存在手机本地，请求从手机直接发给你选的服务商。
   - 没网或出错时自动退回本地规则。
 
 ## 从 Money App 搬家
@@ -53,7 +55,7 @@ Uber 23 USD                              → 交通 · Uber · US$23
 | `app.js` | 界面、保存、统计、导入导出 |
 | `parser.js` | 本地识别规则（中文数字、币种、商家、分类、账户、日期、学习过的商家） |
 | `currencies.js` | 货币表：符号、中文名、各种说法、默认汇率 |
-| `ai.js` | 可选的 Claude 识别 |
+| `ai.js` | 可选的 AI 识别（Claude / DeepSeek） |
 | `importer.js` | Excel / CSV 导入 |
 | `sw.js` / `manifest.webmanifest` | 离线和安装 |
 

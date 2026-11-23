@@ -71,21 +71,41 @@
       <label class="row"><span data-en="How to understand your sentence">识别方式</span>
         <select id="setParser">
           <option value="local" data-en="Built-in rules (free, offline)">本地规则（免费、离线）</option>
-          <option value="ai" data-en="AI (Claude, smarter, needs API key)">AI（Claude，更聪明，需要 API Key）</option>
+          <option value="ai" data-en="AI (Claude / DeepSeek, needs key)">AI（Claude / DeepSeek，需 Key）</option>
         </select>
       </label>
       <div id="aiSettings">
+        <div class="row"><span data-en="AI service">AI 服务</span>
+          <div class="chips" id="providerChips">
+            <label class="chip"><input type="radio" name="provider" value="claude">Claude</label>
+            <label class="chip"><input type="radio" name="provider" value="deepseek">DeepSeek</label>
+          </div>
+        </div>
+        <div id="aiDeepseek">
+          <label class="row">DeepSeek API Key
+            <input id="setDeepseekKey" type="password" placeholder="sk-…" autocomplete="off">
+          </label>
+          <label class="row"><span data-en="DeepSeek model">DeepSeek 模型</span>
+            <select id="setDeepseekModel">
+              <option value="deepseek-chat" data-en="deepseek-chat (fast, cheap — recommended)">deepseek-chat（快、便宜，推荐）</option>
+              <option value="deepseek-reasoner" data-en="deepseek-reasoner (thinks first, slower)">deepseek-reasoner（先推理，较慢）</option>
+            </select>
+          </label>
+          <p class="small" data-en="Get a key at platform.deepseek.com. Each record costs a fraction of a cent.">在 platform.deepseek.com 申请 Key（国内手机号可注册），每记一笔大约不到 1 分钱。</p>
+        </div>
+        <div id="aiClaude">
         <label class="row">Anthropic API Key
           <input id="setApiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
         </label>
-        <label class="row"><span data-en="AI model">AI 模型</span>
+        <label class="row"><span data-en="Claude model">Claude 模型</span>
           <select id="setModel">
             <option value="claude-opus-5-5" data-en="Claude Opus 5.5 (most accurate)">Claude Opus 5.5（最准）</option>
             <option value="claude-sonnet-5-5" data-en="Claude Sonnet 5.5 (half the price)">Claude Sonnet 5.5（便宜一半）</option>
             <option value="claude-haiku-5-5" data-en="Claude Haiku 5.5 (cheapest, fastest)">Claude Haiku 5.5（最便宜、最快）</option>
           </select>
         </label>
-        <p class="small" data-en="Your key stays on this device and is sent only to Anthropic. If offline or on error, built-in rules are used.">Key 只保存在这台设备上，直接发给 Anthropic。没网或出错时会自动改用本地规则。</p>
+        </div>
+        <p class="small" data-en="Keys stay on this device and go only to the AI service you pick. If offline or on error, built-in rules are used.">Key 只保存在这台设备上，只发给你选的 AI 服务。没网或出错时会自动改用本地规则。</p>
       </div>
       <label class="row switch"><span data-en="Let me confirm before saving">保存前先让我确认</span>
         <input type="checkbox" id="setConfirm">

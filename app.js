@@ -14,7 +14,7 @@ const store = {
 };
 let settings = {
   lang: 'zh',
-  parser: 'local', apiKey: '', model: 'claude-opus-5-5', confirm: true,
+  parser: 'local', aiProvider: 'claude', apiKey: '', model: 'claude-opus-5-5', deepseekKey: '', deepseekModel: 'deepseek-chat', confirm: true,
   mainCurrency: 'CNY', defaultCurrency: 'NZD', currencies: ['NZD', 'CNY'],
   accounts: ['卡', '现金', '微信', '支付宝'], defaultAccount: '卡', theme: 'auto',
   fontSize: 1, fontWeight: 'medium', font: 'system', fontEn: 'same',
@@ -386,8 +386,13 @@ function renderSettings() {
   $$('#langChips input').forEach(i => i.checked = i.value === settings.lang);
   $('#setParser').value = settings.parser;
   $('#aiSettings').hidden = settings.parser !== 'ai';
+  $$('#providerChips input').forEach(i => i.checked = i.value === settings.aiProvider);
+  $('#aiClaude').hidden = settings.aiProvider !== 'claude';
+  $('#aiDeepseek').hidden = settings.aiProvider !== 'deepseek';
   $('#setApiKey').value = settings.apiKey;
   $('#setModel').value = settings.model;
+  $('#setDeepseekKey').value = settings.deepseekKey;
+  $('#setDeepseekModel').value = settings.deepseekModel;
   $('#setConfirm').checked = settings.confirm;
   const opts = enabled().map(c => `<option value="${c}">${sym(c).trim()} ${curName(c)}</option>`).join('');
   $('#setMainCur').innerHTML = opts; $('#setMainCur').value = settings.mainCurrency;
@@ -487,20 +492,25 @@ const parseOpts = () => ({
 const aiCats = type => catsOf(type).map(c => ({ id: c.id, label: [c.zh, c.en].filter(Boolean).join(' / '), kw: kwList(c.kw) }));
 
 async function recognize(text) {
-  if (settings.parser === 'ai' && settings.apiKey && navigator.onLine) {
+  const ds = settings.aiProvider === 'deepseek';
+  const key = ds ? settings.deepseekKey : settings.apiKey;
+  if (settings.parser === 'ai' && !key) toast(L('还没填 AI 的 API Key，先用本地规则', 'No AI key yet — using built-in rules'));
+  if (settings.parser === 'ai' && key && navigator.onLine) {
     try {
       const { aiParse } = await import('./ai.js');
       const knownStores = Object.values(memory).slice(-60).map(v => `${v.name}→${v.category}`);
       const recs = await aiParse(text, {
-        apiKey: settings.apiKey, model: settings.model, today: todayStr(),
+        provider: ds ? 'deepseek' : 'claude', apiKey: key, model: ds ? settings.deepseekModel : settings.model, today: todayStr(),
         defaultCurrency: settings.defaultCurrency, currencies: enabled(), defaultAccount: settings.defaultAccount, accounts: settings.accounts,
         expenseCats: aiCats('expense'), incomeCats: aiCats('income'), knownStores,
       });
+      // AI 没给出有效分类时，用本地规则补上
+      for (const r of recs) if (!findCat(r.type, r.category)) r.category = guess(r.type, r.store, r.item);
       if (recs.length) return recs;
       toast(L('AI 没找到金额，改用本地规则', 'AI found no amount — using built-in rules'));
     } catch (e) {
       console.warn(e);
-      toast(L('AI 出错（', 'AI error (') + (e.status || e.message || e) + L('），改用本地规则', ') — using built-in rules'));
+      toast(L('AI 出错（', 'AI error (') + (e.message || e.status || e) + L('），改用本地规则', ') — using built-in rules'));
     }
   }
   return parseMany(text, parseOpts());
@@ -798,6 +808,9 @@ $('#langChips').addEventListener('change', e => { settings.lang = e.target.value
 bindSetting('#setParser', 'parser');
 bindSetting('#setApiKey', 'apiKey', v => v.trim());
 bindSetting('#setModel', 'model');
+bindSetting('#setDeepseekKey', 'deepseekKey', v => v.trim());
+bindSetting('#setDeepseekModel', 'deepseekModel');
+$('#providerChips').addEventListener('change', e => { settings.aiProvider = e.target.value; saveSettings(); render(); });
 bindSetting('#setConfirm', 'confirm');
 bindSetting('#setMainCur', 'mainCurrency');
 bindSetting('#setDefaultCur', 'defaultCurrency');
@@ -851,7 +864,7 @@ $('#btnCsv').onclick = () => {
     [r.date, r.type === 'income' ? L('收入', 'Income') : L('支出', 'Expense'), catLabel(r.type, r.category), r.store, r.item, r.amount, r.currency, r2(toMain(r.amount, r.currency)), r.account, r.note].map(q).join(','));
   download(`${L('记账', 'ledger')}-${todayStr()}.csv`, '﻿' + [head.join(','), ...lines].join('\r\n'), 'text/csv;charset=utf-8');
 };
-$('#btnBackup').onclick = () => download(`${L('记账备份', 'ledger-backup')}-${todayStr()}.json`, JSON.stringify({ version: 3, records, memory, settings: { ...settings, apiKey: '' } }, null, 2), 'application/json');
+$('#btnBackup').onclick = () => download(`${L('记账备份', 'ledger-backup')}-${todayStr()}.json`, JSON.stringify({ version: 3, records, memory, settings: { ...settings, apiKey: '', deepseekKey: '' } }, null, 2), 'application/json');
 $('#fileRestore').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
