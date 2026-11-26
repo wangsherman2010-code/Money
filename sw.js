@@ -1,4 +1,4 @@
-const CACHE = 'voice-ledger-v8';
+const CACHE = 'voice-ledger-v9';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'parser.js', 'currencies.js', 'sync.js', 'ai.js', 'importer.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
